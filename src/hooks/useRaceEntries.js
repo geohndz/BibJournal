@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import db from '../lib/db';
-import { removeImageBackground, blobToDataURL, fileToDataURL, compressImage } from '../lib/imageProcessing';
+import { removeImageBackground, cropToContentBounds, blobToDataURL, fileToDataURL, compressImage } from '../lib/imageProcessing';
 import { parseGPX } from '../lib/gpxParser';
 
 /**
@@ -156,13 +156,18 @@ async function processEntryImages(entryData, existingId = null) {
       const compressedOriginal = await compressImage(entryData.medalPhoto);
       const originalDataURL = await blobToDataURL(compressedOriginal);
       
-      // Remove background automatically
+      // Remove background and crop to content bounds
       let processedDataURL = originalDataURL;
       try {
+        // Step 1: Remove background
         const processedBlob = await removeImageBackground(compressedOriginal);
-        processedDataURL = await blobToDataURL(processedBlob);
+        
+        // Step 2: Crop to content bounds (remove transparent padding)
+        const croppedBlob = await cropToContentBounds(processedBlob);
+        
+        processedDataURL = await blobToDataURL(croppedBlob);
       } catch (bgError) {
-        console.warn('Background removal failed for medal, using original:', bgError);
+        console.warn('Background removal/cropping failed for medal, using original:', bgError);
         // If background removal fails, use original
       }
 

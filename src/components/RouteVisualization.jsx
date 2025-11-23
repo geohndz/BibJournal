@@ -46,7 +46,7 @@ const FinishIcon = L.icon({
 function createCircleMarker(color) {
   return L.divIcon({
     className: 'custom-div-icon',
-    html: `<div style="background-color: ${color}; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
+    html: `<div style="background-color: ${color}; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white;"></div>`,
     iconSize: [12, 12],
     iconAnchor: [6, 6],
   });
@@ -149,12 +149,17 @@ export function RouteVisualization({ routeData }) {
 
   return (
     <div className="w-full">
-      <div className="relative bg-white rounded-lg overflow-hidden shadow-xl" style={{ height: '500px' }}>
+      <div className="relative bg-white rounded-lg overflow-hidden" style={{ height: '500px' }}>
         <MapContainer
           center={center}
           zoom={13}
           style={{ height: '100%', width: '100%' }}
-          scrollWheelZoom={true}
+          scrollWheelZoom={false}
+          dragging={false}
+          touchZoom={false}
+          doubleClickZoom={false}
+          boxZoom={false}
+          keyboard={false}
           className="z-0"
         >
           {/* OpenStreetMap tiles */}

@@ -17,6 +17,7 @@ export function RaceDetail({ entryId, onClose, onEdit }) {
     loadEntry();
   }, [entryId]);
 
+
   const loadEntry = async () => {
     try {
       const data = await getEntry(entryId);
@@ -69,9 +70,9 @@ export function RaceDetail({ entryId, onClose, onEdit }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-gray-50 overflow-y-auto z-50">
+    <div className="fixed inset-0 overflow-y-auto z-50">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <button
@@ -105,10 +106,23 @@ export function RaceDetail({ entryId, onClose, onEdit }) {
       {/* Content */}
       <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-12">
-          {/* Race Bib */}
-          {entry.bibPhoto && (
-            <section className="flex flex-col items-center">
-              <div className="max-w-2xl w-full">
+          {/* Race Information - Moved to top, left-aligned */}
+          <section className="flex flex-col items-start text-left">
+            <h1 className="text-5xl font-bold text-gray-900 mb-4">{entry.raceName}</h1>
+            <div className="flex flex-wrap items-center gap-4 text-gray-600">
+              <span>{entry.raceType}</span>
+              <span>•</span>
+              <span>{entry.location}</span>
+              <span>•</span>
+              <span>{entry.date && formatDate(entry.date, 'MMMM d, yyyy')}</span>
+            </div>
+          </section>
+
+          {/* Race Bib and Medal together - top aligned */}
+          <section className="flex flex-col md:flex-row gap-6 items-start">
+            {/* Bib on the left */}
+            {entry.bibPhoto && (
+              <div className="flex-1 max-w-2xl">
                 <ImageToggle
                   original={entry.bibPhoto.original}
                   cropped={entry.bibPhoto.cropped}
@@ -118,24 +132,42 @@ export function RaceDetail({ entryId, onClose, onEdit }) {
                   alt={`Bib for ${entry.raceName}`}
                 />
               </div>
-            </section>
-          )}
+            )}
 
-          {/* Race Information */}
-          <section className="flex flex-col items-center text-center">
-            <dl className="max-w-2xl w-full space-y-3">
-              <div>
-                <dt className="text-sm font-medium text-gray-500 uppercase tracking-wide">Race Name</dt>
-                <dd className="mt-1 text-2xl font-semibold text-gray-900">{entry.raceName}</dd>
+            {/* Medal Photo on the right - taller case */}
+            {entry.medalPhoto && (
+              <div className="w-full md:w-80 overflow-hidden flex">
+                {/* Medal case frame - taller than square */}
+                <div className="relative w-full aspect-[4/5] flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg border-4 border-gray-300 overflow-hidden">
+                  {/* Glare effect - sweeps across every 10 seconds */}
+                  <div 
+                    className="absolute inset-0 z-20 pointer-events-none"
+                    style={{
+                      background: 'linear-gradient(105deg, transparent 30%, rgba(255,255,255,0.5) 50%, transparent 70%)',
+                      animation: 'glare 10s infinite',
+                      transform: 'translateX(-100%) skewX(-20deg)',
+                    }}
+                  ></div>
+                  {/* Inner padding/glass effect */}
+                  <div className="w-full h-full p-4 flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0) 100%)' }}>
+                    {/* Medal image - larger size */}
+                    <div className="relative z-10 w-full h-full flex items-center justify-center">
+                      <div className="w-full h-full max-w-none max-h-full" style={{ transform: 'scale(1.8)' }}>
+                        <ImageToggle
+                          original={entry.medalPhoto.original}
+                          cropped={entry.medalPhoto.cropped}
+                          useCropped={entry.medalPhoto.useCropped}
+                          processed={entry.medalPhoto.processed}
+                          useProcessed={entry.medalPhoto.useProcessed}
+                          alt={`Medal for ${entry.raceName}`}
+                          showToggle={false}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div className="flex flex-wrap items-center justify-center gap-4 text-gray-600">
-                <span>{entry.raceType}</span>
-                <span>•</span>
-                <span>{entry.location}</span>
-                <span>•</span>
-                <span>{entry.date && formatDate(entry.date, 'MMMM d, yyyy')}</span>
-              </div>
-            </dl>
+            )}
           </section>
 
           {/* Race Results */}
@@ -173,35 +205,36 @@ export function RaceDetail({ entryId, onClose, onEdit }) {
             )
           )}
 
-          {/* Finisher Photo */}
-          {entry.finisherPhoto && (
-            <section className="flex flex-col items-center">
-              <img
-                src={entry.finisherPhoto}
-                alt={`Finisher photo for ${entry.raceName}`}
-                className="w-full h-auto max-w-2xl mx-auto"
-              />
-            </section>
-          )}
-
-          {/* Medal Photo */}
-          {entry.medalPhoto && (
-            <section className="flex flex-col items-center">
-              <div className="max-w-md w-full">
-                <ImageToggle
-                  original={entry.medalPhoto.original}
-                  cropped={entry.medalPhoto.cropped}
-                  useCropped={entry.medalPhoto.useCropped}
-                  processed={entry.medalPhoto.processed}
-                  useProcessed={entry.medalPhoto.useProcessed}
-                  alt={`Medal for ${entry.raceName}`}
-                />
+          {/* Route Visualization with Finisher Photo and Notes */}
+          {entry.routeData && (
+            <section className={`flex flex-col ${entry.finisherPhoto || entry.notes ? 'md:flex-row' : ''} gap-6 items-start`}>
+              {/* Finisher Photo and Notes on the left */}
+              {(entry.finisherPhoto || entry.notes) && (
+                <div className="w-full md:w-80 flex-shrink-0 flex flex-col gap-6">
+                  {entry.finisherPhoto && (
+                    <img
+                      src={entry.finisherPhoto}
+                      alt={`Finisher photo for ${entry.raceName}`}
+                      className="w-full h-auto object-contain rounded-lg"
+                    />
+                  )}
+                  {entry.notes && (
+                    <div className="w-full">
+                      <p className="text-gray-700 whitespace-pre-wrap leading-relaxed text-left">{entry.notes}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* Map on the right (or full width if no finisher photo or notes) */}
+              <div className={`${(entry.finisherPhoto || entry.notes) ? 'flex-1' : 'w-full'} max-w-5xl ${(entry.finisherPhoto || entry.notes) ? '' : 'mx-auto'}`}>
+                <RouteVisualization routeData={entry.routeData} />
               </div>
             </section>
           )}
 
-          {/* Route Visualization */}
-          {entry.routeData && (
+          {/* Route Visualization without Finisher Photo or Notes */}
+          {entry.routeData && !entry.finisherPhoto && !entry.notes && (
             <section className="flex flex-col items-center">
               <div className="w-full max-w-5xl">
                 <RouteVisualization routeData={entry.routeData} />
@@ -209,11 +242,11 @@ export function RaceDetail({ entryId, onClose, onEdit }) {
             </section>
           )}
 
-          {/* Notes */}
-          {entry.notes && (
-            <section className="flex flex-col items-center text-center">
+          {/* Notes without Route Data */}
+          {entry.notes && !entry.routeData && (
+            <section className="flex flex-col items-start">
               <div className="max-w-2xl w-full">
-                <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">{entry.notes}</p>
+                <p className="text-gray-700 whitespace-pre-wrap leading-relaxed text-left">{entry.notes}</p>
               </div>
             </section>
           )}

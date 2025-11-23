@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useRaceEntries } from '../hooks/useRaceEntries';
 import { useViewMode } from '../hooks/useViewMode';
 import { EmptyState } from './EmptyState';
@@ -26,7 +27,14 @@ export function Home({ onAddRace, onViewRace }) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div 
+      className="min-h-screen"
+      style={{
+        backgroundImage: 'radial-gradient(circle, #e5e7eb 1px, transparent 1px)',
+        backgroundSize: '20px 20px',
+        backgroundColor: '#f9fafb'
+      }}
+    >
       {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
@@ -35,7 +43,7 @@ export function Home({ onAddRace, onViewRace }) {
               <img 
                 src={logoSvg} 
                 alt="Bib Journal" 
-                className="h-10 w-auto"
+                className="h-8 w-auto"
               />
             </div>
             <div className="flex items-center gap-4">
@@ -101,41 +109,17 @@ function GridView({ entries, onViewRace }) {
 }
 
 /**
- * List view component
+ * List view component - horizontal layout with small image and text
  */
 function ListView({ entries, onViewRace }) {
   return (
-    <div className="space-y-3">
-      {entries.map((entry) => (
-        <div
-          key={entry.id}
-          onClick={() => onViewRace(entry.id)}
-          className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow cursor-pointer flex items-center gap-4"
-        >
-          {entry.bibPhoto && (
-            <img
-              src={
-                entry.bibPhoto.cropped
-                  ? (entry.bibPhoto.useCropped !== false ? entry.bibPhoto.cropped : entry.bibPhoto.original)
-                  : (entry.bibPhoto.processed 
-                      ? (entry.bibPhoto.useProcessed !== false ? entry.bibPhoto.processed : entry.bibPhoto.original)
-                      : entry.bibPhoto.original)
-              }
-              alt={`Bib for ${entry.raceName}`}
-              className="w-24 h-24 object-contain rounded bg-gray-50 flex-shrink-0"
-            />
+    <div className="space-y-0">
+      {entries.map((entry, index) => (
+        <div key={entry.id}>
+          <ListItemCard entry={entry} onViewRace={onViewRace} />
+          {index < entries.length - 1 && (
+            <div className="border-t border-gray-200 my-6"></div>
           )}
-          <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-gray-900 truncate">
-              {entry.raceName}
-            </h3>
-            <p className="text-sm text-gray-500 mt-1">
-              {entry.raceType} • {entry.location}
-            </p>
-            <p className="text-sm text-gray-400 mt-1">
-              {entry.date && formatDate(entry.date, 'MMM d, yyyy')}
-            </p>
-          </div>
         </div>
       ))}
     </div>
@@ -143,50 +127,13 @@ function ListView({ entries, onViewRace }) {
 }
 
 /**
- * Column view component
+ * Column view component - uses same RaceCard as grid view for consistency
  */
 function ColumnView({ entries, onViewRace }) {
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-2xl mx-auto space-y-12">
       {entries.map((entry) => (
-        <div
-          key={entry.id}
-          onClick={() => onViewRace(entry.id)}
-          className="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
-        >
-          {entry.bibPhoto && (
-            <div className="aspect-video bg-gray-100 flex items-center justify-center">
-              <img
-                src={
-                  entry.bibPhoto.cropped
-                    ? (entry.bibPhoto.useCropped !== false ? entry.bibPhoto.cropped : entry.bibPhoto.original)
-                    : (entry.bibPhoto.processed 
-                        ? (entry.bibPhoto.useProcessed !== false ? entry.bibPhoto.processed : entry.bibPhoto.original)
-                        : entry.bibPhoto.original)
-                }
-                alt={`Bib for ${entry.raceName}`}
-                className="max-w-full max-h-full object-contain"
-              />
-            </div>
-          )}
-          <div className="p-6">
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              {entry.raceName}
-            </h3>
-            <div className="flex flex-wrap gap-4 text-sm text-gray-600 mb-3">
-              <span>{entry.raceType}</span>
-              <span>•</span>
-              <span>{entry.location}</span>
-              <span>•</span>
-              <span>{entry.date && formatDate(entry.date, 'MMM d, yyyy')}</span>
-            </div>
-            {entry.results?.finishTime && (
-              <div className="text-sm text-gray-700">
-                Finish Time: {entry.results.finishTime}
-              </div>
-            )}
-          </div>
-        </div>
+        <RaceCard key={entry.id} entry={entry} onViewRace={onViewRace} />
       ))}
     </div>
   );
@@ -223,6 +170,95 @@ function getCornerPositions(entryId) {
   // Select a random pair based on seed
   const pairIndex = Math.floor(random * cornerPairs.length);
   return cornerPairs[pairIndex];
+}
+
+/**
+ * List item card component for list view - horizontal layout with small image
+ */
+function ListItemCard({ entry, onViewRace }) {
+  const [isHovered, setIsHovered] = useState(false);
+
+  const bibImageSrc = entry.bibPhoto
+    ? (entry.bibPhoto.cropped
+        ? (entry.bibPhoto.useCropped !== false ? entry.bibPhoto.cropped : entry.bibPhoto.original)
+        : (entry.bibPhoto.processed 
+            ? (entry.bibPhoto.useProcessed !== false ? entry.bibPhoto.processed : entry.bibPhoto.original)
+            : entry.bibPhoto.original))
+    : null;
+
+  // Get consistent rotation for this entry
+  const rotation = getRotationForEntry(entry.id);
+
+  return (
+    <div
+      onClick={() => onViewRace(entry.id)}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      className={`flex items-center gap-4 cursor-pointer group overflow-visible py-3 px-3 rounded-lg transition-colors duration-200 ${
+        isHovered ? '' : ''
+      }`}
+      style={{
+        backgroundColor: isHovered ? '#e5e7eb' : 'transparent'
+      }}
+    >
+      {/* Small bib image without overlays */}
+      {bibImageSrc ? (
+        <div 
+          className="w-24 h-24 flex-shrink-0 relative transition-transform duration-300 ease-out overflow-visible"
+          style={{ 
+            transform: `rotate(${rotation}deg)`,
+            transformOrigin: 'center',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = `rotate(0deg) scale(1.05)`;
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = `rotate(${rotation}deg) scale(1)`;
+          }}
+        >
+          <img
+            src={bibImageSrc}
+            alt={`Bib for ${entry.raceName}`}
+            className="w-24 h-24 object-contain rounded-lg"
+          />
+        </div>
+      ) : (
+        <div className="w-24 h-24 flex-shrink-0 bg-gray-100 flex items-center justify-center rounded">
+          <svg
+            className="w-8 h-8 text-gray-400"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+            />
+          </svg>
+        </div>
+      )}
+      
+      {/* Text content on the right */}
+      <div className="flex-1 min-w-0">
+        <h3 className="font-semibold text-gray-900 mb-1 truncate">
+          {entry.raceName}
+        </h3>
+        <p className="text-sm text-gray-500 mb-1">
+          {entry.raceType} {entry.location && `• ${entry.location}`}
+        </p>
+        <p className="text-xs text-gray-400">
+          {entry.date && formatDate(entry.date, 'MMM d, yyyy')}
+        </p>
+        {entry.results?.finishTime && (
+          <p className="text-sm text-gray-600 mt-1">
+            Finish Time: {entry.results.finishTime}
+          </p>
+        )}
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -294,7 +330,7 @@ function RaceCard({ entry, onViewRace }) {
           <img
             src={bibImageSrc}
             alt={`Bib for ${entry.raceName}`}
-            className="w-full h-auto object-contain"
+            className="w-full h-auto object-contain rounded-lg"
           />
           
           {/* Medal cutout overlay (background removed) */}
@@ -313,7 +349,7 @@ function RaceCard({ entry, onViewRace }) {
               <img
                 src={medalImageSrc}
                 alt={`Medal for ${entry.raceName}`}
-                className="w-full h-auto object-contain"
+                className="w-full h-auto object-contain rounded-lg"
                 style={{
                   display: 'block',
                 }}
@@ -331,15 +367,15 @@ function RaceCard({ entry, onViewRace }) {
                 transformOrigin: 'center',
                 width: '28%',
                 maxWidth: '160px',
-                filter: 'drop-shadow(0 3px 6px rgba(0, 0, 0, 0.25))',
+                filter: 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.15))',
               }}
             >
               {/* Polaroid frame - white border with bottom margin */}
               <div 
-                className="bg-white shadow-lg"
+                className="bg-white"
                 style={{ 
                   padding: '6px 6px 18px 6px',
-                  boxShadow: '0 4px 8px rgba(0, 0, 0, 0.2)',
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.15)',
                 }}
               >
                 <img

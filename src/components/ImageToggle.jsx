@@ -3,7 +3,7 @@ import { useState } from 'react';
 /**
  * Component for toggling between original and processed/cropped images
  */
-export function ImageToggle({ original, cropped, useCropped = true, processed, useProcessed, alt = '' }) {
+export function ImageToggle({ original, cropped, useCropped = true, processed, useProcessed, alt = '', showToggle = true }) {
   // Support both formats: cropped (for bibs) and processed (for medals with background removal)
   const hasCropped = !!cropped;
   const hasProcessed = !!processed;
@@ -25,9 +25,9 @@ export function ImageToggle({ original, cropped, useCropped = true, processed, u
       <img
         src={currentImage}
         alt={alt}
-        className="w-full h-auto"
+        className="w-full h-auto rounded-lg"
       />
-      {hasBothVersions && (
+      {hasBothVersions && showToggle && (
         <button
           onClick={() => setShowVersion(!showVersion)}
           className="absolute bottom-2 right-2 bg-black/60 hover:bg-black/80 text-white px-3 py-1.5 rounded-md text-sm transition-colors"
