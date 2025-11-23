@@ -1,13 +1,22 @@
 import { useState } from 'react';
 
 /**
- * Component for toggling between original and processed images
+ * Component for toggling between original and processed/cropped images
  */
-export function ImageToggle({ original, processed, useProcessed = true, alt = '' }) {
-  const [showProcessed, setShowProcessed] = useState(useProcessed);
+export function ImageToggle({ original, cropped, useCropped = true, processed, useProcessed, alt = '' }) {
+  // Support both formats: cropped (for bibs) and processed (for medals with background removal)
+  const hasCropped = !!cropped;
+  const hasProcessed = !!processed;
+  const finalVersion = cropped || processed;
+  const finalUseVersion = useCropped !== undefined ? useCropped : (useProcessed !== undefined ? useProcessed : true);
+  
+  // Determine which version label to use
+  const versionLabel = hasCropped ? 'Cropped' : (hasProcessed ? 'Processed' : 'Cropped');
+  
+  const [showVersion, setShowVersion] = useState(finalUseVersion);
 
-  const currentImage = showProcessed ? processed : original;
-  const hasBothVersions = original && processed && original !== processed;
+  const currentImage = showVersion ? finalVersion : original;
+  const hasBothVersions = original && finalVersion && original !== finalVersion;
 
   if (!currentImage) return null;
 
@@ -16,15 +25,15 @@ export function ImageToggle({ original, processed, useProcessed = true, alt = ''
       <img
         src={currentImage}
         alt={alt}
-        className="w-full h-auto rounded-lg shadow-md"
+        className="w-full h-auto"
       />
       {hasBothVersions && (
         <button
-          onClick={() => setShowProcessed(!showProcessed)}
+          onClick={() => setShowVersion(!showVersion)}
           className="absolute bottom-2 right-2 bg-black/60 hover:bg-black/80 text-white px-3 py-1.5 rounded-md text-sm transition-colors"
-          title={showProcessed ? 'Show original' : 'Show processed'}
+          title={showVersion ? 'Show original' : `Show ${versionLabel.toLowerCase()}`}
         >
-          {showProcessed ? 'Original' : 'Processed'}
+          {showVersion ? 'Original' : versionLabel}
         </button>
       )}
     </div>

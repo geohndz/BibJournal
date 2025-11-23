@@ -3,7 +3,8 @@ import { useViewMode } from '../hooks/useViewMode';
 import { EmptyState } from './EmptyState';
 import { ViewToggle } from './ViewToggle';
 import { FloatingActionButton } from './FloatingActionButton';
-import { format } from 'date-fns';
+import { formatDate } from '../lib/dateUtils';
+import logoSvg from '../assets/Bib Journal.svg';
 
 /**
  * Home screen component displaying all race entries
@@ -31,10 +32,11 @@ export function Home({ onAddRace, onViewRace }) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">BibBox</h1>
-              <p className="text-sm text-gray-500 mt-0.5">
-                Your racing journal
-              </p>
+              <img 
+                src={logoSvg} 
+                alt="Bib Journal" 
+                className="h-10 w-auto"
+              />
             </div>
             <div className="flex items-center gap-4">
               <ViewToggle
@@ -90,7 +92,7 @@ export function Home({ onAddRace, onViewRace }) {
  */
 function GridView({ entries, onViewRace }) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 overflow-visible">
       {entries.map((entry) => (
         <RaceCard key={entry.id} entry={entry} onViewRace={onViewRace} />
       ))}
@@ -113,9 +115,11 @@ function ListView({ entries, onViewRace }) {
           {entry.bibPhoto && (
             <img
               src={
-                entry.bibPhoto.useProcessed
-                  ? entry.bibPhoto.processed
-                  : entry.bibPhoto.original
+                entry.bibPhoto.cropped
+                  ? (entry.bibPhoto.useCropped !== false ? entry.bibPhoto.cropped : entry.bibPhoto.original)
+                  : (entry.bibPhoto.processed 
+                      ? (entry.bibPhoto.useProcessed !== false ? entry.bibPhoto.processed : entry.bibPhoto.original)
+                      : entry.bibPhoto.original)
               }
               alt={`Bib for ${entry.raceName}`}
               className="w-24 h-24 object-contain rounded bg-gray-50 flex-shrink-0"
@@ -129,7 +133,7 @@ function ListView({ entries, onViewRace }) {
               {entry.raceType} • {entry.location}
             </p>
             <p className="text-sm text-gray-400 mt-1">
-              {entry.date && format(new Date(entry.date), 'MMM d, yyyy')}
+              {entry.date && formatDate(entry.date, 'MMM d, yyyy')}
             </p>
           </div>
         </div>
@@ -154,9 +158,11 @@ function ColumnView({ entries, onViewRace }) {
             <div className="aspect-video bg-gray-100 flex items-center justify-center">
               <img
                 src={
-                  entry.bibPhoto.useProcessed
-                    ? entry.bibPhoto.processed
-                    : entry.bibPhoto.original
+                  entry.bibPhoto.cropped
+                    ? (entry.bibPhoto.useCropped !== false ? entry.bibPhoto.cropped : entry.bibPhoto.original)
+                    : (entry.bibPhoto.processed 
+                        ? (entry.bibPhoto.useProcessed !== false ? entry.bibPhoto.processed : entry.bibPhoto.original)
+                        : entry.bibPhoto.original)
                 }
                 alt={`Bib for ${entry.raceName}`}
                 className="max-w-full max-h-full object-contain"
@@ -172,7 +178,7 @@ function ColumnView({ entries, onViewRace }) {
               <span>•</span>
               <span>{entry.location}</span>
               <span>•</span>
-              <span>{entry.date && format(new Date(entry.date), 'MMM d, yyyy')}</span>
+              <span>{entry.date && formatDate(entry.date, 'MMM d, yyyy')}</span>
             </div>
             {entry.results?.finishTime && (
               <div className="text-sm text-gray-700">
@@ -187,28 +193,167 @@ function ColumnView({ entries, onViewRace }) {
 }
 
 /**
- * Race card component for grid view
+ * Generate a consistent random rotation based on entry ID
+ * Returns a value between -3 and 3 degrees
+ */
+function getRotationForEntry(entryId) {
+  // Use entry ID as seed for consistent rotation
+  const seed = entryId * 12345;
+  const random = ((seed * 9301 + 49297) % 233280) / 233280;
+  // Return rotation between -3 and 3 degrees
+  return (random * 6) - 3;
+}
+
+/**
+ * Generate consistent corner positions based on entry ID
+ * Returns positions for medal and finisher photo on opposite corners
+ */
+function getCornerPositions(entryId) {
+  const seed = entryId * 54321;
+  const random = ((seed * 10973 + 571) % 233280) / 233280;
+  
+  // Define corner pairs (opposite corners)
+  const cornerPairs = [
+    { medal: 'top-left', finisher: 'bottom-right' },
+    { medal: 'top-right', finisher: 'bottom-left' },
+    { medal: 'bottom-left', finisher: 'top-right' },
+    { medal: 'bottom-right', finisher: 'top-left' },
+  ];
+  
+  // Select a random pair based on seed
+  const pairIndex = Math.floor(random * cornerPairs.length);
+  return cornerPairs[pairIndex];
+}
+
+/**
+ * Race card component for grid view with scrapbook overlay
  */
 function RaceCard({ entry, onViewRace }) {
+  const bibImageSrc = entry.bibPhoto
+    ? (entry.bibPhoto.cropped
+        ? (entry.bibPhoto.useCropped !== false ? entry.bibPhoto.cropped : entry.bibPhoto.original)
+        : (entry.bibPhoto.processed 
+            ? (entry.bibPhoto.useProcessed !== false ? entry.bibPhoto.processed : entry.bibPhoto.original)
+            : entry.bibPhoto.original))
+    : null;
+
+  // Medal with background removed (processed version for cutout effect)
+  const medalImageSrc = entry.medalPhoto
+    ? (entry.medalPhoto.processed
+        ? (entry.medalPhoto.useProcessed !== false ? entry.medalPhoto.processed : entry.medalPhoto.original)
+        : entry.medalPhoto.original)
+    : null;
+
+  const finisherImageSrc = entry.finisherPhoto;
+
+  // Get consistent rotation and corner positions for this entry
+  const rotation = getRotationForEntry(entry.id);
+  const corners = getCornerPositions(entry.id);
+
+  // Get rotation for medal (random 0-3 degrees)
+  const medalSeed = entry.id * 2;
+  const medalRandom = ((medalSeed * 9301 + 49297) % 233280) / 233280;
+  const medalRotation = medalRandom * 3; // 0 to 3 degrees
+
+  // Get rotation for finisher photo (random 0-3 degrees)
+  const finisherSeed = entry.id * 3;
+  const finisherRandom = ((finisherSeed * 9301 + 49297) % 233280) / 233280;
+  const finisherRotation = finisherRandom * 3; // 0 to 3 degrees
+
+  // Corner position styles - at edges with slight overflow
+  const getCornerStyle = (corner) => {
+    const styles = {
+      'top-left': { top: '-5%', left: '-8%' },
+      'top-right': { top: '-5%', right: '-8%' },
+      'bottom-left': { bottom: '-5%', left: '-8%' },
+      'bottom-right': { bottom: '-5%', right: '-8%' },
+    };
+    return styles[corner] || styles['top-left'];
+  };
+
   return (
     <div
       onClick={() => onViewRace(entry.id)}
-      className="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
+      className="flex flex-col items-center cursor-pointer group overflow-visible"
     >
-      {entry.bibPhoto ? (
-        <div className="aspect-square bg-gray-50 flex items-center justify-center p-4">
+      {bibImageSrc ? (
+        <div 
+          className="w-full mb-3 relative transition-transform duration-300 ease-out overflow-visible"
+          style={{ 
+            transform: `rotate(${rotation}deg)`,
+            transformOrigin: 'center',
+            filter: 'drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1))'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = `rotate(0deg) scale(1.05)`;
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = `rotate(${rotation}deg) scale(1)`;
+          }}
+        >
           <img
-            src={
-              entry.bibPhoto.useProcessed
-                ? entry.bibPhoto.processed
-                : entry.bibPhoto.original
-            }
+            src={bibImageSrc}
             alt={`Bib for ${entry.raceName}`}
-            className="max-w-full max-h-full object-contain"
+            className="w-full h-auto object-contain"
           />
+          
+          {/* Medal cutout overlay (background removed) */}
+          {medalImageSrc && (
+            <div
+              className="absolute pointer-events-none z-10"
+              style={{
+                ...getCornerStyle(corners.medal),
+                transform: `rotate(${medalRotation}deg)`,
+                transformOrigin: 'center',
+                width: '45%',
+                maxWidth: '240px',
+                filter: 'drop-shadow(0 2px 6px rgba(0, 0, 0, 0.3)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2))',
+              }}
+            >
+              <img
+                src={medalImageSrc}
+                alt={`Medal for ${entry.raceName}`}
+                className="w-full h-auto object-contain"
+                style={{
+                  display: 'block',
+                }}
+              />
+            </div>
+          )}
+
+          {/* Finisher photo polaroid overlay */}
+          {finisherImageSrc && (
+            <div
+              className="absolute pointer-events-none z-10"
+              style={{
+                ...getCornerStyle(corners.finisher),
+                transform: `rotate(${finisherRotation}deg)`,
+                transformOrigin: 'center',
+                width: '28%',
+                maxWidth: '160px',
+                filter: 'drop-shadow(0 3px 6px rgba(0, 0, 0, 0.25))',
+              }}
+            >
+              {/* Polaroid frame - white border with bottom margin */}
+              <div 
+                className="bg-white shadow-lg"
+                style={{ 
+                  padding: '6px 6px 18px 6px',
+                  boxShadow: '0 4px 8px rgba(0, 0, 0, 0.2)',
+                }}
+              >
+                <img
+                  src={finisherImageSrc}
+                  alt={`Finisher photo for ${entry.raceName}`}
+                  className="w-full h-auto object-cover"
+                  style={{ display: 'block' }}
+                />
+              </div>
+            </div>
+          )}
         </div>
       ) : (
-        <div className="aspect-square bg-gray-100 flex items-center justify-center">
+        <div className="w-full aspect-square bg-gray-100 flex items-center justify-center mb-3">
           <svg
             className="w-16 h-16 text-gray-400"
             fill="none"
@@ -224,15 +369,15 @@ function RaceCard({ entry, onViewRace }) {
           </svg>
         </div>
       )}
-      <div className="p-4">
-        <h3 className="font-semibold text-gray-900 truncate mb-1">
+      <div className="w-full text-center">
+        <h3 className="font-semibold text-gray-900 mb-1">
           {entry.raceName}
         </h3>
-        <p className="text-sm text-gray-500 truncate mb-1">
+        <p className="text-sm text-gray-500 mb-1">
           {entry.raceType}
         </p>
         <p className="text-xs text-gray-400">
-          {entry.date && format(new Date(entry.date), 'MMM d, yyyy')}
+          {entry.date && formatDate(entry.date, 'MMM d, yyyy')}
         </p>
       </div>
     </div>

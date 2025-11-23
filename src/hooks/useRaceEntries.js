@@ -87,32 +87,22 @@ export function useRaceEntries() {
 }
 
 /**
- * Process entry images - compress and remove backgrounds
+ * Process entry images - compress and store
  */
 async function processEntryImages(entryData, existingId = null) {
   const processed = { ...entryData };
 
-  // Process bib photo
+  // Process bib photo (already cropped by user)
   if (entryData.bibPhoto && entryData.bibPhoto instanceof File) {
     try {
-      // Compress original
-      const compressedOriginal = await compressImage(entryData.bibPhoto);
-      const originalDataURL = await blobToDataURL(compressedOriginal);
-      
-      // Remove background
-      let processedDataURL = originalDataURL;
-      try {
-        const processedBlob = await removeImageBackground(compressedOriginal);
-        processedDataURL = await blobToDataURL(processedBlob);
-      } catch (bgError) {
-        console.warn('Background removal failed, using original:', bgError);
-        // If background removal fails, use original
-      }
+      // Compress the cropped image
+      const compressed = await compressImage(entryData.bibPhoto);
+      const dataURL = await blobToDataURL(compressed);
 
       processed.bibPhoto = {
-        original: originalDataURL,
-        processed: processedDataURL,
-        useProcessed: true,
+        original: dataURL,
+        cropped: dataURL,
+        useCropped: true,
       };
     } catch (error) {
       console.error('Failed to process bib photo:', error);
@@ -120,19 +110,28 @@ async function processEntryImages(entryData, existingId = null) {
       const dataURL = await fileToDataURL(entryData.bibPhoto);
       processed.bibPhoto = {
         original: dataURL,
-        processed: dataURL,
-        useProcessed: false,
+        cropped: dataURL,
+        useCropped: true,
       };
     }
   } else if (entryData.bibPhoto && (typeof entryData.bibPhoto === 'object' && !(entryData.bibPhoto instanceof File))) {
-    // Already processed (object with original/processed), keep as is (for updates)
-    processed.bibPhoto = entryData.bibPhoto;
+    // Already processed, keep as is (for updates)
+    // Handle legacy format (processed) by converting to cropped
+    if (entryData.bibPhoto.processed) {
+      processed.bibPhoto = {
+        original: entryData.bibPhoto.original || entryData.bibPhoto.processed,
+        cropped: entryData.bibPhoto.processed,
+        useCropped: entryData.bibPhoto.useProcessed !== false,
+      };
+    } else {
+      processed.bibPhoto = entryData.bibPhoto;
+    }
   } else if (entryData.bibPhoto && typeof entryData.bibPhoto === 'string') {
     // Legacy string format, convert to object format
     processed.bibPhoto = {
       original: entryData.bibPhoto,
-      processed: entryData.bibPhoto,
-      useProcessed: false,
+      cropped: entryData.bibPhoto,
+      useCropped: true,
     };
   }
 
@@ -150,18 +149,21 @@ async function processEntryImages(entryData, existingId = null) {
     processed.finisherPhoto = entryData.finisherPhoto;
   }
 
-  // Process medal photo
+  // Process medal photo (automatic background removal)
   if (entryData.medalPhoto && entryData.medalPhoto instanceof File) {
     try {
+      // Compress original first
       const compressedOriginal = await compressImage(entryData.medalPhoto);
       const originalDataURL = await blobToDataURL(compressedOriginal);
       
+      // Remove background automatically
       let processedDataURL = originalDataURL;
       try {
         const processedBlob = await removeImageBackground(compressedOriginal);
         processedDataURL = await blobToDataURL(processedBlob);
       } catch (bgError) {
-        console.warn('Background removal failed for medal:', bgError);
+        console.warn('Background removal failed for medal, using original:', bgError);
+        // If background removal fails, use original
       }
 
       processed.medalPhoto = {
@@ -171,6 +173,7 @@ async function processEntryImages(entryData, existingId = null) {
       };
     } catch (error) {
       console.error('Failed to process medal photo:', error);
+      // Fallback to data URL of original file
       const dataURL = await fileToDataURL(entryData.medalPhoto);
       processed.medalPhoto = {
         original: dataURL,
@@ -179,8 +182,25 @@ async function processEntryImages(entryData, existingId = null) {
       };
     }
   } else if (entryData.medalPhoto && (typeof entryData.medalPhoto === 'object' && !(entryData.medalPhoto instanceof File))) {
-    // Already processed (object with original/processed), keep as is (for updates)
-    processed.medalPhoto = entryData.medalPhoto;
+    // Already processed, keep as is (for updates)
+    // Handle both cropped and processed formats for backward compatibility
+    if (entryData.medalPhoto.processed) {
+      // Has processed version (background removed)
+      processed.medalPhoto = {
+        original: entryData.medalPhoto.original,
+        processed: entryData.medalPhoto.processed,
+        useProcessed: entryData.medalPhoto.useProcessed !== false,
+      };
+    } else if (entryData.medalPhoto.cropped) {
+      // Has cropped version (convert to processed format)
+      processed.medalPhoto = {
+        original: entryData.medalPhoto.original,
+        processed: entryData.medalPhoto.cropped,
+        useProcessed: entryData.medalPhoto.useCropped !== false,
+      };
+    } else {
+      processed.medalPhoto = entryData.medalPhoto;
+    }
   } else if (entryData.medalPhoto && typeof entryData.medalPhoto === 'string') {
     // Legacy string format, convert to object format
     processed.medalPhoto = {

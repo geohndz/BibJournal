@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useRaceEntries } from '../hooks/useRaceEntries';
+import { ImageCropper } from './ImageCropper';
 
 const RACE_TYPES = [
   'Marathon',
@@ -51,7 +52,9 @@ export function RaceForm({ entryId, onClose, onSave }) {
           raceName: entry.raceName || '',
           raceType: entry.raceType || '',
           location: entry.location || '',
-          date: entry.date ? new Date(entry.date).toISOString().split('T')[0] : '',
+          date: entry.date ? (typeof entry.date === 'string' && entry.date.includes('T') 
+            ? new Date(entry.date).toISOString().split('T')[0] 
+            : entry.date.split('T')[0]) : '',
           results: {
             finishTime: entry.results?.finishTime || '',
             overallPlace: entry.results?.overallPlace || '',
@@ -290,6 +293,7 @@ export function RaceForm({ entryId, onClose, onSave }) {
                 onChange={(file) => handleFileChange('bibPhoto', file)}
                 accept="image/*"
                 required={!entryId || !formData.bibPhoto}
+                enableCrop={true}
               />
             </div>
 
@@ -314,6 +318,7 @@ export function RaceForm({ entryId, onClose, onSave }) {
                 value={formData.medalPhoto}
                 onChange={(file) => handleFileChange('medalPhoto', file)}
                 accept="image/*"
+                enableCrop={false}
               />
             </div>
 
@@ -368,17 +373,45 @@ export function RaceForm({ entryId, onClose, onSave }) {
 }
 
 /**
- * File input component with preview
+ * File input component with preview and optional cropping
  */
-function FileInput({ value, onChange, accept, required = false }) {
+function FileInput({ value, onChange, accept, required = false, enableCrop = false }) {
+  const [showCropper, setShowCropper] = useState(false);
+  const [tempFile, setTempFile] = useState(null);
   const isImage = accept?.includes('image');
   const isGPX = accept?.includes('.gpx');
 
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
     if (file) {
-      onChange(file);
+      if (enableCrop && isImage) {
+        // Show cropper for bib/medal photos
+        setTempFile(file);
+        setShowCropper(true);
+      } else {
+        onChange(file);
+      }
     }
+  };
+
+  const handleCropComplete = (croppedDataURL) => {
+    // Convert data URL to File
+    fetch(croppedDataURL)
+      .then(res => res.blob())
+      .then(blob => {
+        const file = new File([blob], tempFile.name, { type: blob.type });
+        onChange(file);
+        setShowCropper(false);
+        setTempFile(null);
+      });
+  };
+
+  const handleCropCancel = () => {
+    setShowCropper(false);
+    setTempFile(null);
+    // Reset file input
+    const input = document.querySelector('input[type="file"]');
+    if (input) input.value = '';
   };
 
   const getPreviewSrc = () => {
@@ -390,37 +423,48 @@ function FileInput({ value, onChange, accept, required = false }) {
   };
 
   const previewSrc = getPreviewSrc();
+  const cropperSrc = tempFile ? URL.createObjectURL(tempFile) : null;
+
   const fileName = value?.name || (value instanceof File ? value.name : (typeof value === 'object' && value !== null && value.original ? 'Current image' : ''));
 
   return (
-    <div>
-      <div className="flex items-center gap-4">
-        <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-          </svg>
-          Choose File
-          <input
-            type="file"
-            onChange={handleFileChange}
-            accept={accept}
-            required={required && !value}
-            className="hidden"
-          />
-        </label>
-        {fileName && (
-          <span className="text-sm text-gray-600">{fileName}</span>
+    <>
+      {showCropper && cropperSrc && (
+        <ImageCropper
+          imageSrc={cropperSrc}
+          onCropComplete={handleCropComplete}
+          onCancel={handleCropCancel}
+        />
+      )}
+      <div>
+        <div className="flex items-center gap-4">
+          <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            Choose File
+            <input
+              type="file"
+              onChange={handleFileChange}
+              accept={accept}
+              required={required && !value}
+              className="hidden"
+            />
+          </label>
+          {fileName && (
+            <span className="text-sm text-gray-600">{fileName}</span>
+          )}
+        </div>
+        {previewSrc && isImage && (
+          <div className="mt-4">
+            <img
+              src={previewSrc}
+              alt="Preview"
+              className="max-w-xs max-h-64 rounded-lg border border-gray-200"
+            />
+          </div>
         )}
       </div>
-      {previewSrc && isImage && (
-        <div className="mt-4">
-          <img
-            src={previewSrc}
-            alt="Preview"
-            className="max-w-xs max-h-64 rounded-lg border border-gray-200"
-          />
-        </div>
-      )}
-    </div>
+    </>
   );
 }

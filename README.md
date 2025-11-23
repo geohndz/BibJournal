@@ -1,4 +1,4 @@
-# BibBox - Your Racing Journal
+# Bib Journal - Your Racing Journal
 
 A web-based journal application that allows runners and athletes to document and preserve their racing achievements through a visual, scrapbook-style interface featuring race bibs, medals, finisher photos, and route maps.
 

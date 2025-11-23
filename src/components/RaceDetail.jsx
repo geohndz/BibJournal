@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useRaceEntries } from '../hooks/useRaceEntries';
 import { ImageToggle } from './ImageToggle';
 import { RouteVisualization } from './RouteVisualization';
-import { format } from 'date-fns';
+import { formatDate } from '../lib/dateUtils';
 
 /**
  * Race detail view component
@@ -104,14 +104,15 @@ export function RaceDetail({ entryId, onClose, onEdit }) {
 
       {/* Content */}
       <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="space-y-8">
+        <div className="space-y-12">
           {/* Race Bib */}
           {entry.bibPhoto && (
-            <section>
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Race Bib</h2>
-              <div className="bg-white rounded-lg shadow-md p-6">
+            <section className="flex flex-col items-center">
+              <div className="max-w-2xl w-full">
                 <ImageToggle
                   original={entry.bibPhoto.original}
+                  cropped={entry.bibPhoto.cropped}
+                  useCropped={entry.bibPhoto.useCropped}
                   processed={entry.bibPhoto.processed}
                   useProcessed={entry.bibPhoto.useProcessed}
                   alt={`Bib for ${entry.raceName}`}
@@ -121,106 +122,88 @@ export function RaceDetail({ entryId, onClose, onEdit }) {
           )}
 
           {/* Race Information */}
-          <section>
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Race Information</h2>
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <dt className="text-sm font-medium text-gray-500">Race Name</dt>
-                  <dd className="mt-1 text-lg text-gray-900">{entry.raceName}</dd>
-                </div>
-                <div>
-                  <dt className="text-sm font-medium text-gray-500">Race Type</dt>
-                  <dd className="mt-1 text-lg text-gray-900">{entry.raceType}</dd>
-                </div>
-                <div>
-                  <dt className="text-sm font-medium text-gray-500">Location</dt>
-                  <dd className="mt-1 text-lg text-gray-900">{entry.location}</dd>
-                </div>
-                <div>
-                  <dt className="text-sm font-medium text-gray-500">Date</dt>
-                  <dd className="mt-1 text-lg text-gray-900">
-                    {entry.date && format(new Date(entry.date), 'MMMM d, yyyy')}
-                  </dd>
-                </div>
-              </dl>
-            </div>
+          <section className="flex flex-col items-center text-center">
+            <dl className="max-w-2xl w-full space-y-3">
+              <div>
+                <dt className="text-sm font-medium text-gray-500 uppercase tracking-wide">Race Name</dt>
+                <dd className="mt-1 text-2xl font-semibold text-gray-900">{entry.raceName}</dd>
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-4 text-gray-600">
+                <span>{entry.raceType}</span>
+                <span>•</span>
+                <span>{entry.location}</span>
+                <span>•</span>
+                <span>{entry.date && formatDate(entry.date, 'MMMM d, yyyy')}</span>
+              </div>
+            </dl>
           </section>
 
           {/* Race Results */}
           {entry.results && (
             (entry.results.finishTime || entry.results.overallPlace || 
              entry.results.ageGroupPlace || entry.results.division) && (
-              <section>
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">Race Results</h2>
-                <div className="bg-white rounded-lg shadow-md p-6">
-                  <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {entry.results.finishTime && (
-                      <div>
-                        <dt className="text-sm font-medium text-gray-500">Finish Time</dt>
-                        <dd className="mt-1 text-lg text-gray-900">{entry.results.finishTime}</dd>
-                      </div>
-                    )}
-                    {entry.results.overallPlace && (
-                      <div>
-                        <dt className="text-sm font-medium text-gray-500">Overall Place</dt>
-                        <dd className="mt-1 text-lg text-gray-900">{entry.results.overallPlace}</dd>
-                      </div>
-                    )}
-                    {entry.results.ageGroupPlace && (
-                      <div>
-                        <dt className="text-sm font-medium text-gray-500">Age Group Place</dt>
-                        <dd className="mt-1 text-lg text-gray-900">{entry.results.ageGroupPlace}</dd>
-                      </div>
-                    )}
-                    {entry.results.division && (
-                      <div>
-                        <dt className="text-sm font-medium text-gray-500">Division</dt>
-                        <dd className="mt-1 text-lg text-gray-900">{entry.results.division}</dd>
-                      </div>
-                    )}
-                  </dl>
-                </div>
+              <section className="flex flex-col items-center text-center">
+                <dl className="max-w-2xl w-full grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {entry.results.finishTime && (
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500 uppercase tracking-wide">Finish Time</dt>
+                      <dd className="mt-1 text-lg font-semibold text-gray-900">{entry.results.finishTime}</dd>
+                    </div>
+                  )}
+                  {entry.results.overallPlace && (
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500 uppercase tracking-wide">Overall Place</dt>
+                      <dd className="mt-1 text-lg font-semibold text-gray-900">{entry.results.overallPlace}</dd>
+                    </div>
+                  )}
+                  {entry.results.ageGroupPlace && (
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500 uppercase tracking-wide">Age Group Place</dt>
+                      <dd className="mt-1 text-lg font-semibold text-gray-900">{entry.results.ageGroupPlace}</dd>
+                    </div>
+                  )}
+                  {entry.results.division && (
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500 uppercase tracking-wide">Division</dt>
+                      <dd className="mt-1 text-lg font-semibold text-gray-900">{entry.results.division}</dd>
+                    </div>
+                  )}
+                </dl>
               </section>
             )
           )}
 
           {/* Finisher Photo */}
           {entry.finisherPhoto && (
-            <section>
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Finisher Photo</h2>
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <img
-                  src={entry.finisherPhoto}
-                  alt={`Finisher photo for ${entry.raceName}`}
-                  className="w-full h-auto rounded-lg shadow-sm max-w-2xl mx-auto"
-                />
-              </div>
+            <section className="flex flex-col items-center">
+              <img
+                src={entry.finisherPhoto}
+                alt={`Finisher photo for ${entry.raceName}`}
+                className="w-full h-auto max-w-2xl mx-auto"
+              />
             </section>
           )}
 
           {/* Medal Photo */}
           {entry.medalPhoto && (
-            <section>
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Medal</h2>
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <div className="max-w-md mx-auto">
-                  <ImageToggle
-                    original={entry.medalPhoto.original}
-                    processed={entry.medalPhoto.processed}
-                    useProcessed={entry.medalPhoto.useProcessed}
-                    alt={`Medal for ${entry.raceName}`}
-                  />
-                </div>
+            <section className="flex flex-col items-center">
+              <div className="max-w-md w-full">
+                <ImageToggle
+                  original={entry.medalPhoto.original}
+                  cropped={entry.medalPhoto.cropped}
+                  useCropped={entry.medalPhoto.useCropped}
+                  processed={entry.medalPhoto.processed}
+                  useProcessed={entry.medalPhoto.useProcessed}
+                  alt={`Medal for ${entry.raceName}`}
+                />
               </div>
             </section>
           )}
 
           {/* Route Visualization */}
           {entry.routeData && (
-            <section>
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Route</h2>
-              <div className="bg-white rounded-lg shadow-md p-6">
+            <section className="flex flex-col items-center">
+              <div className="w-full max-w-5xl">
                 <RouteVisualization routeData={entry.routeData} />
               </div>
             </section>
@@ -228,10 +211,9 @@ export function RaceDetail({ entryId, onClose, onEdit }) {
 
           {/* Notes */}
           {entry.notes && (
-            <section>
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Notes</h2>
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <p className="text-gray-700 whitespace-pre-wrap">{entry.notes}</p>
+            <section className="flex flex-col items-center text-center">
+              <div className="max-w-2xl w-full">
+                <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">{entry.notes}</p>
               </div>
             </section>
           )}

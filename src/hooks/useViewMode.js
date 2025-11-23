@@ -11,12 +11,12 @@ const VIEW_MODES = {
  */
 export function useViewMode() {
   const [viewMode, setViewMode] = useState(() => {
-    const saved = localStorage.getItem('bibbox-view-mode');
+    const saved = localStorage.getItem('bib-journal-view-mode');
     return saved || VIEW_MODES.GRID;
   });
 
   useEffect(() => {
-    localStorage.setItem('bibbox-view-mode', viewMode);
+    localStorage.setItem('bib-journal-view-mode', viewMode);
   }, [viewMode]);
 
   return {
