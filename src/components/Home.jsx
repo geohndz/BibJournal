@@ -10,9 +10,21 @@ import logoSvg from '../assets/Bib Journal.svg';
 /**
  * Home screen component displaying all race entries
  */
+const RACE_TYPES = [
+  'Marathon',
+  'Half Marathon',
+  '10K',
+  '5K',
+  'Trail Race',
+  'Triathlon',
+  'Ultra',
+  'Other',
+];
+
 export function Home({ onAddRace, onViewRace }) {
   const { entries, loading } = useRaceEntries();
   const { viewMode, setViewMode, VIEW_MODES } = useViewMode();
+  const [selectedFilters, setSelectedFilters] = useState([]);
 
   if (loading) {
     return (
@@ -21,6 +33,14 @@ export function Home({ onAddRace, onViewRace }) {
       </div>
     );
   }
+
+  // Filter entries based on selected race types
+  const filteredEntries = selectedFilters.length > 0
+    ? entries.filter(entry => selectedFilters.includes(entry.raceType))
+    : entries;
+
+  // Get unique race types from entries, sorted
+  const availableRaceTypes = [...new Set(entries.map(e => e.raceType).filter(Boolean))].sort();
 
   if (entries.length === 0) {
     return <EmptyState onAddRace={onAddRace} />;
@@ -36,7 +56,7 @@ export function Home({ onAddRace, onViewRace }) {
       }}
     >
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div>
@@ -76,16 +96,73 @@ export function Home({ onAddRace, onViewRace }) {
         </div>
       </header>
 
+      {/* Filter Bar */}
+      {entries.length > 0 && (
+        <div className="bg-white border-t border-b border-gray-200 sticky top-[73px] z-10">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div className="flex items-center justify-between">
+              {/* Left side - Showing count */}
+              <div className="text-sm text-gray-600">
+                {selectedFilters.length > 0 
+                  ? `Showing: ${filteredEntries.length} ${filteredEntries.length === 1 ? 'race' : 'races'}`
+                  : `Showing: All (${entries.length} ${entries.length === 1 ? 'race' : 'races'})`
+                }
+              </div>
+              
+              {/* Right side - Filter dropdowns */}
+              <div className="flex items-center gap-3">
+                {/* Race Type Filter */}
+                <div className="relative">
+                  <select
+                    value={selectedFilters.length === 1 ? selectedFilters[0] : ''}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setSelectedFilters(value ? [value] : []);
+                    }}
+                    className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent appearance-none pr-8 cursor-pointer"
+                  >
+                    <option value="">All Race Types</option>
+                    {availableRaceTypes.map(raceType => (
+                      <option key={raceType} value={raceType}>{raceType}</option>
+                    ))}
+                  </select>
+                  {/* Custom dropdown arrow */}
+                  <div className="absolute right-2 top-1/2 transform -translate-y-1/2 pointer-events-none">
+                    <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24">
-        {viewMode === VIEW_MODES.GRID && (
-          <GridView entries={entries} onViewRace={onViewRace} />
-        )}
-        {viewMode === VIEW_MODES.LIST && (
-          <ListView entries={entries} onViewRace={onViewRace} />
-        )}
-        {viewMode === VIEW_MODES.COLUMN && (
-          <ColumnView entries={entries} onViewRace={onViewRace} />
+        {filteredEntries.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-gray-500">No races match your filters.</p>
+            <button
+              onClick={() => setSelectedFilters([])}
+              className="mt-4 text-black hover:underline"
+            >
+              Clear filters
+            </button>
+          </div>
+        ) : (
+          <>
+            {viewMode === VIEW_MODES.GRID && (
+              <GridView entries={filteredEntries} onViewRace={onViewRace} />
+            )}
+            {viewMode === VIEW_MODES.LIST && (
+              <ListView entries={filteredEntries} onViewRace={onViewRace} />
+            )}
+            {viewMode === VIEW_MODES.COLUMN && (
+              <ColumnView entries={filteredEntries} onViewRace={onViewRace} />
+            )}
+          </>
         )}
       </main>
 

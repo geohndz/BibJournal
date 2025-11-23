@@ -51,7 +51,11 @@ export function RaceForm({ entryId, onClose, onSave }) {
         setFormData({
           raceName: entry.raceName || '',
           raceType: entry.raceType || '',
-          location: entry.location || '',
+          location: typeof entry.location === 'string' 
+            ? entry.location 
+            : (typeof entry.location === 'object' && entry.location !== null && entry.location.name
+                ? entry.location.name
+                : ''),
           date: entry.date ? (typeof entry.date === 'string' && entry.date.includes('T') 
             ? new Date(entry.date).toISOString().split('T')[0] 
             : entry.date.split('T')[0]) : '',
@@ -64,7 +68,15 @@ export function RaceForm({ entryId, onClose, onSave }) {
           bibPhoto: entry.bibPhoto || null,
           finisherPhoto: entry.finisherPhoto || null,
           medalPhoto: entry.medalPhoto || null,
-          gpxFile: entry.gpxFile ? { name: entry.gpxFile } : null,
+          gpxFile: entry.gpxFile 
+            ? (typeof entry.gpxFile === 'string' 
+                ? { name: entry.gpxFile } 
+                : (entry.gpxFile instanceof File 
+                    ? entry.gpxFile 
+                    : (typeof entry.gpxFile === 'object' && entry.gpxFile?.name 
+                        ? entry.gpxFile 
+                        : null)))
+            : null,
           notes: entry.notes || '',
         });
       }
@@ -425,7 +437,18 @@ function FileInput({ value, onChange, accept, required = false, enableCrop = fal
   const previewSrc = getPreviewSrc();
   const cropperSrc = tempFile ? URL.createObjectURL(tempFile) : null;
 
-  const fileName = value?.name || (value instanceof File ? value.name : (typeof value === 'object' && value !== null && value.original ? 'Current image' : ''));
+  const getFileName = () => {
+    if (!value) return '';
+    if (typeof value === 'string') return value;
+    if (value instanceof File) return value.name || '';
+    if (typeof value === 'object' && value !== null) {
+      if (value.name && typeof value.name === 'string') return value.name;
+      if (value.original) return 'Current image';
+    }
+    return '';
+  };
+  
+  const fileName = getFileName();
 
   return (
     <>
