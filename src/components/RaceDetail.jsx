@@ -3,6 +3,7 @@ import { useRaceEntries } from '../hooks/useRaceEntries';
 import { ImageToggle } from './ImageToggle';
 import { RouteVisualization } from './RouteVisualization';
 import { formatDate } from '../lib/dateUtils';
+import { trackRaceViewed, trackRaceDeleted } from '../lib/analytics';
 
 /**
  * Race detail view component
@@ -23,6 +24,11 @@ export function RaceDetail({ entryId, onClose, onEdit }) {
       const data = await getEntry(entryId);
       setEntry(data);
       setLoading(false);
+      
+      // Track race viewed
+      if (data && data.raceType) {
+        trackRaceViewed(data.raceType);
+      }
     } catch (error) {
       console.error('Failed to load entry:', error);
       setLoading(false);
@@ -36,6 +42,11 @@ export function RaceDetail({ entryId, onClose, onEdit }) {
 
     setDeleting(true);
     try {
+      // Track race deleted before deleting
+      if (entry && entry.raceType) {
+        trackRaceDeleted(entry.raceType);
+      }
+      
       await deleteEntry(entryId);
       onClose();
     } catch (error) {

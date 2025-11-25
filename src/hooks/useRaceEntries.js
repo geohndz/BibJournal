@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import db from '../lib/db';
+import { firestoreDb } from '../lib/firestoreDb';
+import { useAuth } from '../contexts/AuthContext';
 import { removeImageBackground, cropToContentBounds, blobToDataURL, fileToDataURL, compressImage } from '../lib/imageProcessing';
 import { parseGPX } from '../lib/gpxParser';
 
@@ -9,15 +10,24 @@ import { parseGPX } from '../lib/gpxParser';
 export function useRaceEntries() {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { currentUser } = useAuth();
 
-  // Load entries from IndexedDB
+  // Load entries from Firestore
   useEffect(() => {
-    loadEntries();
-  }, []);
+    if (currentUser) {
+      loadEntries();
+    } else {
+      setEntries([]);
+      setLoading(false);
+    }
+  }, [currentUser]);
 
   const loadEntries = async () => {
+    if (!currentUser) return;
+    
     try {
-      const allEntries = await db.raceEntries.orderBy('date').reverse().toArray();
+      setLoading(true);
+      const allEntries = await firestoreDb.getEntries(currentUser.uid);
       setEntries(allEntries);
       setLoading(false);
     } catch (error) {
@@ -27,13 +37,13 @@ export function useRaceEntries() {
   };
 
   const addEntry = async (entryData) => {
+    if (!currentUser) {
+      throw new Error('User must be logged in to add entries');
+    }
+    
     try {
-      const processedEntry = await processEntryImages(entryData);
-      const id = await db.raceEntries.add({
-        ...processedEntry,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+      const processedEntry = await processEntryImages(entryData, null, currentUser.uid);
+      const id = await firestoreDb.addEntry(currentUser.uid, processedEntry);
       await loadEntries();
       return id;
     } catch (error) {
@@ -43,12 +53,13 @@ export function useRaceEntries() {
   };
 
   const updateEntry = async (id, entryData) => {
+    if (!currentUser) {
+      throw new Error('User must be logged in to update entries');
+    }
+    
     try {
-      const processedEntry = await processEntryImages(entryData, id);
-      await db.raceEntries.update(id, {
-        ...processedEntry,
-        updatedAt: new Date(),
-      });
+      const processedEntry = await processEntryImages(entryData, id, currentUser.uid);
+      await firestoreDb.updateEntry(id, processedEntry);
       await loadEntries();
     } catch (error) {
       console.error('Failed to update entry:', error);
@@ -57,8 +68,12 @@ export function useRaceEntries() {
   };
 
   const deleteEntry = async (id) => {
+    if (!currentUser) {
+      throw new Error('User must be logged in to delete entries');
+    }
+    
     try {
-      await db.raceEntries.delete(id);
+      await firestoreDb.deleteEntry(id);
       await loadEntries();
     } catch (error) {
       console.error('Failed to delete entry:', error);
@@ -67,8 +82,12 @@ export function useRaceEntries() {
   };
 
   const getEntry = async (id) => {
+    if (!currentUser) {
+      throw new Error('User must be logged in to get entries');
+    }
+    
     try {
-      return await db.raceEntries.get(parseInt(id));
+      return await firestoreDb.getEntry(id);
     } catch (error) {
       console.error('Failed to get entry:', error);
       throw error;
@@ -87,9 +106,24 @@ export function useRaceEntries() {
 }
 
 /**
- * Process entry images - compress and store
+ * Helper function to convert data URL to blob
  */
-async function processEntryImages(entryData, existingId = null) {
+function dataURLtoBlob(dataURL) {
+  const arr = dataURL.split(',');
+  const mime = arr[0].match(/:(.*?);/)[1];
+  const bstr = atob(arr[1]);
+  let n = bstr.length;
+  const u8arr = new Uint8Array(n);
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n);
+  }
+  return new Blob([u8arr], { type: mime });
+}
+
+/**
+ * Process entry images - compress and upload to Firebase Storage
+ */
+async function processEntryImages(entryData, existingId = null, userId = null) {
   const processed = { ...entryData };
 
   // Process bib photo (already cropped by user)
@@ -97,22 +131,19 @@ async function processEntryImages(entryData, existingId = null) {
     try {
       // Compress the cropped image
       const compressed = await compressImage(entryData.bibPhoto);
-      const dataURL = await blobToDataURL(compressed);
-
+      
+      // Upload to Firebase Storage
+      const originalBlob = dataURLtoBlob(await blobToDataURL(compressed));
+      const originalUrl = await firestoreDb.uploadImage(userId, originalBlob, 'bib-photos');
+      
       processed.bibPhoto = {
-        original: dataURL,
-        cropped: dataURL,
+        original: originalUrl,
+        cropped: originalUrl,
         useCropped: true,
       };
     } catch (error) {
       console.error('Failed to process bib photo:', error);
-      // Fallback to data URL of original file
-      const dataURL = await fileToDataURL(entryData.bibPhoto);
-      processed.bibPhoto = {
-        original: dataURL,
-        cropped: dataURL,
-        useCropped: true,
-      };
+      throw error;
     }
   } else if (entryData.bibPhoto && (typeof entryData.bibPhoto === 'object' && !(entryData.bibPhoto instanceof File))) {
     // Already processed, keep as is (for updates)
@@ -127,26 +158,65 @@ async function processEntryImages(entryData, existingId = null) {
       processed.bibPhoto = entryData.bibPhoto;
     }
   } else if (entryData.bibPhoto && typeof entryData.bibPhoto === 'string') {
-    // Legacy string format, convert to object format
-    processed.bibPhoto = {
-      original: entryData.bibPhoto,
-      cropped: entryData.bibPhoto,
-      useCropped: true,
-    };
+    // Check if it's a data URL (legacy) or already a storage URL
+    if (entryData.bibPhoto.startsWith('data:')) {
+      // Legacy data URL - convert to blob and upload
+      try {
+        const blob = dataURLtoBlob(entryData.bibPhoto);
+        const url = await firestoreDb.uploadImage(userId, blob, 'bib-photos');
+        processed.bibPhoto = {
+          original: url,
+          cropped: url,
+          useCropped: true,
+        };
+      } catch (error) {
+        console.error('Failed to upload legacy bib photo:', error);
+        // Keep as is if upload fails
+        processed.bibPhoto = {
+          original: entryData.bibPhoto,
+          cropped: entryData.bibPhoto,
+          useCropped: true,
+        };
+      }
+    } else {
+      // Already a storage URL
+      processed.bibPhoto = {
+        original: entryData.bibPhoto,
+        cropped: entryData.bibPhoto,
+        useCropped: true,
+      };
+    }
   }
 
   // Process finisher photo
   if (entryData.finisherPhoto && entryData.finisherPhoto instanceof File) {
     try {
       const compressed = await compressImage(entryData.finisherPhoto);
-      processed.finisherPhoto = await blobToDataURL(compressed);
+      const blob = dataURLtoBlob(await blobToDataURL(compressed));
+      processed.finisherPhoto = await firestoreDb.uploadImage(userId, blob, 'finisher-photos');
     } catch (error) {
       console.error('Failed to process finisher photo:', error);
-      processed.finisherPhoto = await fileToDataURL(entryData.finisherPhoto);
+      throw error;
     }
-  } else if (entryData.finisherPhoto && (typeof entryData.finisherPhoto === 'string' || typeof entryData.finisherPhoto === 'object')) {
-    // Already processed (string data URL or existing object), keep as is
-    processed.finisherPhoto = entryData.finisherPhoto;
+  } else if (entryData.finisherPhoto) {
+    // Check if it's a data URL (legacy) or already a storage URL
+    const finisherPhoto = typeof entryData.finisherPhoto === 'string' 
+      ? entryData.finisherPhoto 
+      : entryData.finisherPhoto;
+    
+    if (typeof finisherPhoto === 'string' && finisherPhoto.startsWith('data:')) {
+      // Legacy data URL - convert to blob and upload
+      try {
+        const blob = dataURLtoBlob(finisherPhoto);
+        processed.finisherPhoto = await firestoreDb.uploadImage(userId, blob, 'finisher-photos');
+      } catch (error) {
+        console.error('Failed to upload legacy finisher photo:', error);
+        processed.finisherPhoto = finisherPhoto; // Keep as is if upload fails
+      }
+    } else {
+      // Already a storage URL or object
+      processed.finisherPhoto = finisherPhoto;
+    }
   }
 
   // Process medal photo (automatic background removal)
@@ -154,10 +224,13 @@ async function processEntryImages(entryData, existingId = null) {
     try {
       // Compress original first
       const compressedOriginal = await compressImage(entryData.medalPhoto);
-      const originalDataURL = await blobToDataURL(compressedOriginal);
+      
+      // Upload original to Storage
+      const originalBlob = dataURLtoBlob(await blobToDataURL(compressedOriginal));
+      const originalUrl = await firestoreDb.uploadImage(userId, originalBlob, 'medal-photos');
       
       // Remove background and crop to content bounds
-      let processedDataURL = originalDataURL;
+      let processedUrl = originalUrl;
       try {
         // Step 1: Remove background
         const processedBlob = await removeImageBackground(compressedOriginal);
@@ -165,26 +238,21 @@ async function processEntryImages(entryData, existingId = null) {
         // Step 2: Crop to content bounds (remove transparent padding)
         const croppedBlob = await cropToContentBounds(processedBlob);
         
-        processedDataURL = await blobToDataURL(croppedBlob);
+        // Upload processed version to Storage
+        processedUrl = await firestoreDb.uploadImage(userId, croppedBlob, 'medal-photos');
       } catch (bgError) {
         console.warn('Background removal/cropping failed for medal, using original:', bgError);
         // If background removal fails, use original
       }
 
       processed.medalPhoto = {
-        original: originalDataURL,
-        processed: processedDataURL,
+        original: originalUrl,
+        processed: processedUrl,
         useProcessed: true,
       };
     } catch (error) {
       console.error('Failed to process medal photo:', error);
-      // Fallback to data URL of original file
-      const dataURL = await fileToDataURL(entryData.medalPhoto);
-      processed.medalPhoto = {
-        original: dataURL,
-        processed: dataURL,
-        useProcessed: false,
-      };
+      throw error;
     }
   } else if (entryData.medalPhoto && (typeof entryData.medalPhoto === 'object' && !(entryData.medalPhoto instanceof File))) {
     // Already processed, keep as is (for updates)
@@ -207,12 +275,33 @@ async function processEntryImages(entryData, existingId = null) {
       processed.medalPhoto = entryData.medalPhoto;
     }
   } else if (entryData.medalPhoto && typeof entryData.medalPhoto === 'string') {
-    // Legacy string format, convert to object format
-    processed.medalPhoto = {
-      original: entryData.medalPhoto,
-      processed: entryData.medalPhoto,
-      useProcessed: false,
-    };
+    // Check if it's a data URL (legacy) or already a storage URL
+    if (entryData.medalPhoto.startsWith('data:')) {
+      // Legacy data URL - convert to blob and upload
+      try {
+        const blob = dataURLtoBlob(entryData.medalPhoto);
+        const url = await firestoreDb.uploadImage(userId, blob, 'medal-photos');
+        processed.medalPhoto = {
+          original: url,
+          processed: url,
+          useProcessed: false,
+        };
+      } catch (error) {
+        console.error('Failed to upload legacy medal photo:', error);
+        processed.medalPhoto = {
+          original: entryData.medalPhoto,
+          processed: entryData.medalPhoto,
+          useProcessed: false,
+        };
+      }
+    } else {
+      // Already a storage URL
+      processed.medalPhoto = {
+        original: entryData.medalPhoto,
+        processed: entryData.medalPhoto,
+        useProcessed: false,
+      };
+    }
   }
 
   // Process GPX file

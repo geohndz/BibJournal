@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRaceEntries } from '../hooks/useRaceEntries';
 import { useViewMode } from '../hooks/useViewMode';
 import { EmptyState } from './EmptyState';
 import { ViewToggle } from './ViewToggle';
 import { FloatingActionButton } from './FloatingActionButton';
 import { formatDate } from '../lib/dateUtils';
+import { trackViewModeChanged, trackFilterApplied, trackFilterCleared, trackRaceViewed, trackTotalEntries } from '../lib/analytics';
 import logoSvg from '../assets/Bib Journal.svg';
 
 /**
@@ -21,10 +22,26 @@ const RACE_TYPES = [
   'Other',
 ];
 
-export function Home({ onAddRace, onViewRace }) {
+export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
   const { entries, loading } = useRaceEntries();
   const { viewMode, setViewMode, VIEW_MODES } = useViewMode();
   const [selectedFilters, setSelectedFilters] = useState([]);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const userMenuRef = useRef(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
+        setShowUserMenu(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   if (loading) {
     return (
@@ -41,6 +58,39 @@ export function Home({ onAddRace, onViewRace }) {
 
   // Get unique race types from entries, sorted
   const availableRaceTypes = [...new Set(entries.map(e => e.raceType).filter(Boolean))].sort();
+
+  // Track total entries count
+  useEffect(() => {
+    if (!loading && entries.length > 0) {
+      trackTotalEntries(entries.length);
+    }
+  }, [entries.length, loading]);
+
+  // Track view mode changes
+  const handleViewModeChange = (newMode) => {
+    setViewMode(newMode);
+    trackViewModeChanged(newMode);
+  };
+
+  // Track filter changes
+  const handleFilterChange = (value) => {
+    const newFilters = value ? [value] : [];
+    setSelectedFilters(newFilters);
+    if (newFilters.length > 0) {
+      trackFilterApplied(newFilters);
+    } else {
+      trackFilterCleared();
+    }
+  };
+
+  // Track race viewed
+  const handleViewRace = (entryId) => {
+    const entry = entries.find(e => e.id === entryId);
+    if (entry) {
+      trackRaceViewed(entry.raceType);
+    }
+    onViewRace(entryId);
+  };
 
   if (entries.length === 0) {
     return <EmptyState onAddRace={onAddRace} />;
@@ -69,7 +119,7 @@ export function Home({ onAddRace, onViewRace }) {
             <div className="flex items-center gap-4">
               <ViewToggle
                 viewMode={viewMode}
-                onViewModeChange={setViewMode}
+                onViewModeChange={handleViewModeChange}
                 VIEW_MODES={VIEW_MODES}
               />
               <button
@@ -91,6 +141,60 @@ export function Home({ onAddRace, onViewRace }) {
                 </svg>
                 Add Race
               </button>
+              
+              {/* User Avatar Dropdown */}
+              <div className="relative" ref={userMenuRef}>
+                <button
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  className="flex items-center justify-center w-10 h-10 rounded-full bg-primary-600 text-white font-medium hover:bg-primary-700 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+                >
+                  {currentUser?.displayName ? (
+                    currentUser.displayName.charAt(0).toUpperCase()
+                  ) : currentUser?.email ? (
+                    currentUser.email.charAt(0).toUpperCase()
+                  ) : (
+                    'U'
+                  )}
+                </button>
+                
+                {/* Dropdown Menu */}
+                {showUserMenu && (
+                  <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
+                    <div className="px-4 py-3 border-b border-gray-200">
+                      {currentUser?.displayName && (
+                        <p className="text-sm font-semibold text-gray-900">
+                          {currentUser.displayName}
+                        </p>
+                      )}
+                      <p className="text-sm text-gray-600 truncate">
+                        {currentUser?.email || 'No email'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        onLogout();
+                        setShowUserMenu(false);
+                      }}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors flex items-center gap-2"
+                    >
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                        />
+                      </svg>
+                      Logout
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -117,7 +221,7 @@ export function Home({ onAddRace, onViewRace }) {
                     value={selectedFilters.length === 1 ? selectedFilters[0] : ''}
                     onChange={(e) => {
                       const value = e.target.value;
-                      setSelectedFilters(value ? [value] : []);
+                      handleFilterChange(value);
                     }}
                     className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent appearance-none pr-8 cursor-pointer"
                   >
@@ -145,7 +249,10 @@ export function Home({ onAddRace, onViewRace }) {
           <div className="text-center py-12">
             <p className="text-gray-500">No races match your filters.</p>
             <button
-              onClick={() => setSelectedFilters([])}
+              onClick={() => {
+                setSelectedFilters([]);
+                trackFilterCleared();
+              }}
               className="mt-4 text-black hover:underline"
             >
               Clear filters
@@ -154,13 +261,13 @@ export function Home({ onAddRace, onViewRace }) {
         ) : (
           <>
             {viewMode === VIEW_MODES.GRID && (
-              <GridView entries={filteredEntries} onViewRace={onViewRace} />
+              <GridView entries={filteredEntries} onViewRace={handleViewRace} />
             )}
             {viewMode === VIEW_MODES.LIST && (
-              <ListView entries={filteredEntries} onViewRace={onViewRace} />
+              <ListView entries={filteredEntries} onViewRace={handleViewRace} />
             )}
             {viewMode === VIEW_MODES.COLUMN && (
-              <ColumnView entries={filteredEntries} onViewRace={onViewRace} />
+              <ColumnView entries={filteredEntries} onViewRace={handleViewRace} />
             )}
           </>
         )}
@@ -221,9 +328,20 @@ function ColumnView({ entries, onViewRace }) {
  * Returns a value between -3 and 3 degrees
  */
 function getRotationForEntry(entryId) {
-  // Use entry ID as seed for consistent rotation
-  const seed = entryId * 12345;
-  const random = ((seed * 9301 + 49297) % 233280) / 233280;
+  // Convert string ID to numeric seed
+  let seed = 0;
+  if (typeof entryId === 'string') {
+    // Hash the string to a number
+    for (let i = 0; i < entryId.length; i++) {
+      seed = ((seed << 5) - seed) + entryId.charCodeAt(i);
+      seed = seed & seed; // Convert to 32-bit integer
+    }
+    seed = seed * 12345;
+  } else {
+    seed = (entryId || 0) * 12345;
+  }
+  
+  const random = ((Math.abs(seed) * 9301 + 49297) % 233280) / 233280;
   // Return rotation between -3 and 3 degrees
   return (random * 6) - 3;
 }
@@ -233,8 +351,19 @@ function getRotationForEntry(entryId) {
  * Returns positions for medal and finisher photo on opposite corners
  */
 function getCornerPositions(entryId) {
-  const seed = entryId * 54321;
-  const random = ((seed * 10973 + 571) % 233280) / 233280;
+  // Convert string ID to numeric seed
+  let seed = 0;
+  if (typeof entryId === 'string') {
+    // Hash the string to a number
+    for (let i = 0; i < entryId.length; i++) {
+      seed = ((seed << 5) - seed) + entryId.charCodeAt(i);
+      seed = seed & seed; // Convert to 32-bit integer
+    }
+  } else {
+    seed = entryId || 0;
+  }
+  
+  const random = ((Math.abs(seed) * 10973 + 571) % 233280) / 233280;
   
   // Define corner pairs (opposite corners)
   const cornerPairs = [
@@ -246,7 +375,10 @@ function getCornerPositions(entryId) {
   
   // Select a random pair based on seed
   const pairIndex = Math.floor(random * cornerPairs.length);
-  return cornerPairs[pairIndex];
+  const result = cornerPairs[pairIndex];
+  
+  // Ensure we always return a valid object with both properties
+  return result || { medal: 'top-left', finisher: 'bottom-right' };
 }
 
 /**
@@ -361,15 +493,28 @@ function RaceCard({ entry, onViewRace }) {
 
   // Get consistent rotation and corner positions for this entry
   const rotation = getRotationForEntry(entry.id);
-  const corners = getCornerPositions(entry.id);
+  const corners = getCornerPositions(entry.id) || { medal: 'top-left', finisher: 'bottom-right' };
+
+  // Helper function to convert string ID to numeric seed
+  const getIdSeed = (id, multiplier = 1) => {
+    if (typeof id === 'string') {
+      let seed = 0;
+      for (let i = 0; i < id.length; i++) {
+        seed = ((seed << 5) - seed) + id.charCodeAt(i);
+        seed = seed & seed;
+      }
+      return Math.abs(seed) * multiplier;
+    }
+    return (id || 0) * multiplier;
+  };
 
   // Get rotation for medal (random 0-3 degrees)
-  const medalSeed = entry.id * 2;
+  const medalSeed = getIdSeed(entry.id, 2);
   const medalRandom = ((medalSeed * 9301 + 49297) % 233280) / 233280;
   const medalRotation = medalRandom * 3; // 0 to 3 degrees
 
   // Get rotation for finisher photo (random 0-3 degrees)
-  const finisherSeed = entry.id * 3;
+  const finisherSeed = getIdSeed(entry.id, 3);
   const finisherRandom = ((finisherSeed * 9301 + 49297) % 233280) / 233280;
   const finisherRotation = finisherRandom * 3; // 0 to 3 degrees
 

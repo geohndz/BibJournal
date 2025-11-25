@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRaceEntries } from '../hooks/useRaceEntries';
 import { ImageCropper } from './ImageCropper';
+import { trackFormStarted, trackFormAbandoned, trackRaceCreated, trackRaceUpdated, trackImageUploaded, trackGPXUploaded } from '../lib/analytics';
 
 const RACE_TYPES = [
   'Marathon',
@@ -38,10 +39,22 @@ export function RaceForm({ entryId, onClose, onSave }) {
     notes: '',
   });
 
+  const formSavedRef = useRef(false);
+
   useEffect(() => {
+    // Track form started
+    trackFormStarted(!!entryId);
+    
     if (entryId) {
       loadEntry();
     }
+    
+    // Track form abandoned on unmount if not saved
+    return () => {
+      if (!formSavedRef.current) {
+        trackFormAbandoned(!!entryId);
+      }
+    };
   }, [entryId]);
 
   const loadEntry = async () => {
@@ -110,6 +123,17 @@ export function RaceForm({ entryId, onClose, onSave }) {
       ...prev,
       [field]: file,
     }));
+    
+    // Track image uploads
+    if (file && field === 'bibPhoto') {
+      trackImageUploaded('bib');
+    } else if (file && field === 'finisherPhoto') {
+      trackImageUploaded('finisher');
+    } else if (file && field === 'medalPhoto') {
+      trackImageUploaded('medal');
+    } else if (file && field === 'gpxFile') {
+      trackGPXUploaded();
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -140,10 +164,35 @@ export function RaceForm({ entryId, onClose, onSave }) {
     setSaving(true);
     try {
       await onSave(formData);
+      formSavedRef.current = true;
+      
+      // Track race created/updated
+      const hasBibPhoto = !!formData.bibPhoto;
+      const hasFinisherPhoto = !!formData.finisherPhoto;
+      const hasMedalPhoto = !!formData.medalPhoto;
+      const hasGPX = !!formData.gpxFile;
+      
+      if (entryId) {
+        trackRaceUpdated(formData.raceType);
+      } else {
+        trackRaceCreated(formData.raceType, hasBibPhoto, hasFinisherPhoto, hasMedalPhoto, hasGPX);
+      }
+      
       onClose();
     } catch (error) {
       console.error('Failed to save:', error);
-      alert('Failed to save race entry. Please try again.');
+      // Show more specific error message
+      let errorMessage = 'Failed to save race entry. Please try again.';
+      if (error.message) {
+        if (error.message.includes('permission') || error.message.includes('Permission')) {
+          errorMessage = 'Permission denied. Please check your Firestore security rules.';
+        } else if (error.message.includes('network') || error.message.includes('Network')) {
+          errorMessage = 'Network error. Please check your internet connection.';
+        } else {
+          errorMessage = `Error: ${error.message}`;
+        }
+      }
+      alert(errorMessage);
     } finally {
       setSaving(false);
     }
