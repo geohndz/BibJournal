@@ -43,22 +43,6 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
     };
   }, []);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-gray-500">Loading...</div>
-      </div>
-    );
-  }
-
-  // Filter entries based on selected race types
-  const filteredEntries = selectedFilters.length > 0
-    ? entries.filter(entry => selectedFilters.includes(entry.raceType))
-    : entries;
-
-  // Get unique race types from entries, sorted
-  const availableRaceTypes = [...new Set(entries.map(e => e.raceType).filter(Boolean))].sort();
-
   // Track total entries count
   useEffect(() => {
     if (!loading && entries.length > 0) {
@@ -91,6 +75,22 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
     }
     onViewRace(entryId);
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-gray-500">Loading...</div>
+      </div>
+    );
+  }
+
+  // Filter entries based on selected race types
+  const filteredEntries = selectedFilters.length > 0
+    ? entries.filter(entry => selectedFilters.includes(entry.raceType))
+    : entries;
+
+  // Get unique race types from entries, sorted
+  const availableRaceTypes = [...new Set(entries.map(e => e.raceType).filter(Boolean))].sort();
 
   if (entries.length === 0) {
     return <EmptyState onAddRace={onAddRace} />;

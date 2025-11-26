@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { trackLogin, trackSignup } from '../lib/analytics';
+import backgroundImage from '../assets/pietro-rampazzo-x5GcXFvJJhI-unsplash.jpg';
 
 export function Login({ onClose }) {
   const [email, setEmail] = useState('');
@@ -46,8 +47,20 @@ export function Login({ onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-md mx-4">
+    <div 
+      className="fixed inset-0 flex items-center justify-center z-50"
+      style={{
+        backgroundImage: `url(${backgroundImage})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+      }}
+    >
+      {/* Overlay */}
+      <div className="absolute inset-0 bg-black bg-opacity-50"></div>
+      
+      {/* Form Card */}
+      <div className="relative bg-white rounded-lg shadow-xl p-8 w-full max-w-md mx-4 z-10">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-gray-800">
             {isSignup ? 'Sign Up' : 'Sign In'}
