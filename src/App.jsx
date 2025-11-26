@@ -80,15 +80,15 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {currentView === 'home' && (
-        <Home
-          onAddRace={handleAddRace}
-          onViewRace={handleViewRace}
-          currentUser={currentUser}
-          onLogout={handleLogout}
-        />
-      )}
+      {/* Always show Home in the background */}
+      <Home
+        onAddRace={handleAddRace}
+        onViewRace={handleViewRace}
+        currentUser={currentUser}
+        onLogout={handleLogout}
+      />
       
+      {/* Form overlay */}
       {currentView === 'form' && (
         <RaceForm
           entryId={selectedEntryId}
@@ -97,6 +97,7 @@ function App() {
         />
       )}
       
+      {/* Detail overlay */}
       {currentView === 'detail' && selectedEntryId && (
         <RaceDetail
           entryId={selectedEntryId}

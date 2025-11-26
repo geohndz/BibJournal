@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Plus, LogOut, ChevronDown } from 'lucide-react';
 import { useRaceEntries } from '../hooks/useRaceEntries';
 import { useViewMode } from '../hooks/useViewMode';
 import { EmptyState } from './EmptyState';
@@ -26,7 +27,9 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
   const { entries, loading } = useRaceEntries();
   const { viewMode, setViewMode, VIEW_MODES } = useViewMode();
   const [selectedFilters, setSelectedFilters] = useState([]);
+  const [sortBy, setSortBy] = useState('date'); // 'date', 'type', 'name'
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showFABTooltip, setShowFABTooltip] = useState(false);
   const userMenuRef = useRef(null);
 
   // Close dropdown when clicking outside
@@ -41,6 +44,15 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
+  }, []);
+
+  // Show FAB tooltip on mount for 5 seconds
+  useEffect(() => {
+    setShowFABTooltip(true);
+    const timer = setTimeout(() => {
+      setShowFABTooltip(false);
+    }, 5000);
+    return () => clearTimeout(timer);
   }, []);
 
   // Track total entries count
@@ -85,12 +97,59 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
   }
 
   // Filter entries based on selected race types
-  const filteredEntries = selectedFilters.length > 0
+  let filteredEntries = selectedFilters.length > 0
     ? entries.filter(entry => selectedFilters.includes(entry.raceType))
     : entries;
 
+  // Sort entries
+  filteredEntries = [...filteredEntries].sort((a, b) => {
+    switch (sortBy) {
+      case 'type':
+        // Sort by race type (A-Z)
+        const typeA = a.raceType || '';
+        const typeB = b.raceType || '';
+        if (typeA !== typeB) {
+          return typeA.localeCompare(typeB);
+        }
+        // If same type, sort by date (newest first)
+        const dateA = a.date instanceof Date ? a.date : new Date(a.date || 0);
+        const dateB = b.date instanceof Date ? b.date : new Date(b.date || 0);
+        return dateB - dateA;
+      
+      case 'name':
+        // Sort by race name (A-Z)
+        const nameA = (a.raceName || '').toLowerCase();
+        const nameB = (b.raceName || '').toLowerCase();
+        if (nameA !== nameB) {
+          return nameA.localeCompare(nameB);
+        }
+        // If same name, sort by date (newest first)
+        const dateA2 = a.date instanceof Date ? a.date : new Date(a.date || 0);
+        const dateB2 = b.date instanceof Date ? b.date : new Date(b.date || 0);
+        return dateB2 - dateA2;
+      
+      case 'date':
+      default:
+        // Sort by date added (newest first) - using createdAt or updatedAt
+        const createdA = a.createdAt instanceof Date ? a.createdAt : (a.createdAt ? new Date(a.createdAt) : new Date(0));
+        const createdB = b.createdAt instanceof Date ? b.createdAt : (b.createdAt ? new Date(b.createdAt) : new Date(0));
+        return createdB - createdA;
+    }
+  });
+
   // Get unique race types from entries, sorted
   const availableRaceTypes = [...new Set(entries.map(e => e.raceType).filter(Boolean))].sort();
+
+  // Group entries by race type when sorting by type
+  const groupedByType = sortBy === 'type' 
+    ? availableRaceTypes.reduce((acc, raceType) => {
+        const typeEntries = filteredEntries.filter(e => e.raceType === raceType);
+        if (typeEntries.length > 0) {
+          acc[raceType] = typeEntries;
+        }
+        return acc;
+      }, {})
+    : null;
 
   if (entries.length === 0) {
     return <EmptyState onAddRace={onAddRace} />;
@@ -126,19 +185,7 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
                 onClick={onAddRace}
                 className="bg-primary-600 hover:bg-primary-700 text-white font-medium px-4 py-2 rounded-lg transition-colors inline-flex items-center gap-2"
               >
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 4v16m8-8H4"
-                  />
-                </svg>
+                <Plus className="w-5 h-5" />
                 Add Race
               </button>
               
@@ -177,19 +224,7 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
                       }}
                       className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors flex items-center gap-2"
                     >
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-                        />
-                      </svg>
+                      <LogOut className="w-4 h-4" />
                       Logout
                     </button>
                   </div>
@@ -213,28 +248,52 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
                 }
               </div>
               
-              {/* Right side - Filter dropdowns */}
+              {/* Right side - Sort and Filter dropdowns with labels */}
               <div className="flex items-center gap-3">
-                {/* Race Type Filter */}
-                <div className="relative">
-                  <select
-                    value={selectedFilters.length === 1 ? selectedFilters[0] : ''}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      handleFilterChange(value);
-                    }}
-                    className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent appearance-none pr-8 cursor-pointer"
-                  >
-                    <option value="">All Race Types</option>
-                    {availableRaceTypes.map(raceType => (
-                      <option key={raceType} value={raceType}>{raceType}</option>
-                    ))}
-                  </select>
-                  {/* Custom dropdown arrow */}
-                  <div className="absolute right-2 top-1/2 transform -translate-y-1/2 pointer-events-none">
-                    <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
+                {/* Sort Dropdown */}
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-700 font-medium">Sort:</label>
+                  <div className="relative">
+                    <select
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value)}
+                      className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent appearance-none pr-8 cursor-pointer"
+                    >
+                      <option value="date">Date Added</option>
+                      <option value="type">Race Type</option>
+                      <option value="name">Name (A-Z)</option>
+                    </select>
+                    {/* Custom dropdown arrow */}
+                    <div className="absolute right-2 top-1/2 transform -translate-y-1/2 pointer-events-none">
+                      <ChevronDown className="w-4 h-4 text-gray-500" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Vertical Divider */}
+                <div className="h-6 w-px bg-gray-300"></div>
+
+                {/* Filter Dropdown */}
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-700 font-medium">Filter:</label>
+                  <div className="relative">
+                    <select
+                      value={selectedFilters.length === 1 ? selectedFilters[0] : ''}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        handleFilterChange(value);
+                      }}
+                      className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent appearance-none pr-8 cursor-pointer"
+                    >
+                      <option value="">All Race Types</option>
+                      {availableRaceTypes.map(raceType => (
+                        <option key={raceType} value={raceType}>{raceType}</option>
+                      ))}
+                    </select>
+                    {/* Custom dropdown arrow */}
+                    <div className="absolute right-2 top-1/2 transform -translate-y-1/2 pointer-events-none">
+                      <ChevronDown className="w-4 h-4 text-gray-500" />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -258,23 +317,95 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
               Clear filters
             </button>
           </div>
+        ) : sortBy === 'type' && groupedByType ? (
+          // Grouped by race type view
+          <div className="space-y-12">
+            {Object.entries(groupedByType).map(([raceType, typeEntries], groupIndex) => (
+              <div key={raceType} className="space-y-6">
+                {/* Header with race type and line */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-lg font-semibold text-gray-900">{raceType}</h2>
+                    <div className="flex-1 border-t border-gray-300"></div>
+                  </div>
+                </div>
+                
+                {/* Use grid view for all types when sorting by type */}
+                <GridView entries={typeEntries} onViewRace={handleViewRace} onAddRace={onAddRace} showAddRace={false} />
+                {/* Add "Add Race" card at the end of the first type only */}
+                {groupIndex === 0 && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-12 overflow-visible">
+                    <AddRaceCard onAddRace={onAddRace} />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         ) : (
           <>
             {viewMode === VIEW_MODES.GRID && (
-              <GridView entries={filteredEntries} onViewRace={handleViewRace} />
+              <GridView entries={filteredEntries} onViewRace={handleViewRace} onAddRace={onAddRace} />
             )}
             {viewMode === VIEW_MODES.LIST && (
-              <ListView entries={filteredEntries} onViewRace={handleViewRace} />
+              <ListView entries={filteredEntries} onViewRace={handleViewRace} onAddRace={onAddRace} />
             )}
             {viewMode === VIEW_MODES.COLUMN && (
-              <ColumnView entries={filteredEntries} onViewRace={handleViewRace} />
+              <ColumnView entries={filteredEntries} onViewRace={handleViewRace} onAddRace={onAddRace} />
             )}
           </>
         )}
       </main>
 
       {/* Floating Action Button */}
-      <FloatingActionButton onClick={onAddRace} />
+      <FloatingActionButton showTooltip={showFABTooltip} />
+    </div>
+  );
+}
+
+/**
+ * Add Race Card component - rectangular with dotted lines and plus icon
+ */
+function AddRaceCard({ onAddRace }) {
+  return (
+    <div
+      onClick={onAddRace}
+      className="flex flex-col items-center cursor-pointer group overflow-visible"
+    >
+      <div 
+        className="w-full mb-3 relative transition-transform duration-300 ease-out overflow-visible rounded-lg flex items-center justify-center bg-gray-50 hover:bg-gray-100"
+        style={{
+          aspectRatio: '4/3',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = 'scale(1.05)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = 'scale(1)';
+        }}
+      >
+        {/* SVG border with spaced dashes */}
+        <svg
+          className="absolute inset-0 w-full h-full pointer-events-none"
+          style={{ borderRadius: '0.5rem' }}
+        >
+          <rect
+            x="1"
+            y="1"
+            width="calc(100% - 2px)"
+            height="calc(100% - 2px)"
+            fill="none"
+            stroke="#d1d5db"
+            strokeWidth="2"
+            strokeDasharray="8 8"
+            rx="0.5rem"
+            className="group-hover:stroke-gray-400 transition-colors"
+          />
+        </svg>
+        <Plus className="w-12 h-12 text-gray-400 group-hover:text-gray-600 transition-colors relative z-10" />
+      </div>
+      <div className="text-center">
+        <h3 className="font-semibold text-gray-900 mb-1">Add Race</h3>
+      </div>
     </div>
   );
 }
@@ -282,12 +413,13 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
 /**
  * Grid view component (masonry-style)
  */
-function GridView({ entries, onViewRace }) {
+function GridView({ entries, onViewRace, onAddRace, showAddRace = true }) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 overflow-visible">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-12 overflow-visible">
       {entries.map((entry) => (
         <RaceCard key={entry.id} entry={entry} onViewRace={onViewRace} />
       ))}
+      {showAddRace && <AddRaceCard onAddRace={onAddRace} />}
     </div>
   );
 }
@@ -295,17 +427,51 @@ function GridView({ entries, onViewRace }) {
 /**
  * List view component - horizontal layout with small image and text
  */
-function ListView({ entries, onViewRace }) {
+function ListView({ entries, onViewRace, onAddRace, showAddRace = true }) {
   return (
-    <div className="space-y-0">
+    <div>
       {entries.map((entry, index) => (
-        <div key={entry.id}>
+        <React.Fragment key={entry.id}>
           <ListItemCard entry={entry} onViewRace={onViewRace} />
           {index < entries.length - 1 && (
-            <div className="border-t border-gray-200 my-6"></div>
+            <div className="border-t border-gray-200 my-10"></div>
           )}
-        </div>
+        </React.Fragment>
       ))}
+      {showAddRace && entries.length > 0 && (
+        <div className="border-t border-gray-200 mt-10"></div>
+      )}
+      {showAddRace && (
+        <div
+          onClick={onAddRace}
+          className="flex items-center gap-4 cursor-pointer group overflow-visible py-3 px-3 rounded-lg transition-colors duration-200 hover:bg-gray-100"
+        >
+          <div className="w-24 h-24 flex-shrink-0 rounded-lg flex items-center justify-center bg-gray-50 hover:bg-gray-100 relative">
+            {/* SVG border with spaced dashes */}
+            <svg
+              className="absolute inset-0 w-full h-full pointer-events-none"
+              style={{ borderRadius: '0.5rem' }}
+            >
+              <rect
+                x="1"
+                y="1"
+                width="calc(100% - 2px)"
+                height="calc(100% - 2px)"
+                fill="none"
+                stroke="#d1d5db"
+                strokeWidth="2"
+                strokeDasharray="8 8"
+                rx="0.5rem"
+                className="group-hover:stroke-gray-400 transition-colors"
+              />
+            </svg>
+            <Plus className="w-8 h-8 text-gray-400 group-hover:text-gray-600 transition-colors relative z-10" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-semibold text-gray-900 mb-1">Add Race</h3>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -313,12 +479,13 @@ function ListView({ entries, onViewRace }) {
 /**
  * Column view component - uses same RaceCard as grid view for consistency
  */
-function ColumnView({ entries, onViewRace }) {
+function ColumnView({ entries, onViewRace, onAddRace }) {
   return (
-    <div className="max-w-2xl mx-auto space-y-12">
+    <div className="max-w-2xl mx-auto space-y-20">
       {entries.map((entry) => (
         <RaceCard key={entry.id} entry={entry} onViewRace={onViewRace} />
       ))}
+      <AddRaceCard onAddRace={onAddRace} />
     </div>
   );
 }

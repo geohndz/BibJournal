@@ -81,7 +81,7 @@ export function RaceDetail({ entryId, onClose, onEdit }) {
   }
 
   return (
-    <div className="fixed inset-0 overflow-y-auto z-50">
+    <div className="fixed inset-0 overflow-y-auto z-50 bg-gray-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
@@ -133,7 +133,7 @@ export function RaceDetail({ entryId, onClose, onEdit }) {
           <section className="flex flex-col md:flex-row gap-6 items-start">
             {/* Bib on the left */}
             {entry.bibPhoto && (
-              <div className="flex-1 max-w-2xl">
+              <div className={entry.medalPhoto ? "flex-1 max-w-2xl" : "w-full"}>
                 <ImageToggle
                   original={entry.bibPhoto.original}
                   cropped={entry.bibPhoto.cropped}
