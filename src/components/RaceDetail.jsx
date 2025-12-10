@@ -4,7 +4,7 @@ import { ImageToggle } from './ImageToggle';
 import { RouteVisualization } from './RouteVisualization';
 import { formatDate } from '../lib/dateUtils';
 import { trackRaceViewed, trackRaceDeleted } from '../lib/analytics';
-import { Medal, Clock, Trophy, UserRound, Users, MoreVertical, Pencil, Trash2 } from 'lucide-react';
+import { Medal, Clock, Trophy, UserRound, Users, MoreVertical, Pencil, Trash2, Maximize2, X } from 'lucide-react';
 
 /**
  * Race detail view component
@@ -15,7 +15,7 @@ export function RaceDetail({ entryId, onClose, onEdit }) {
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
-  const [unit, setUnit] = useState('miles'); // Default to miles
+  const [showFinisherModal, setShowFinisherModal] = useState(false);
   const menuRef = useRef(null);
 
   useEffect(() => {
@@ -115,30 +115,6 @@ export function RaceDetail({ entryId, onClose, onEdit }) {
               Back
             </button>
             <div className="flex items-center gap-3">
-              {/* Units Toggle */}
-              <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
-                <button
-                  onClick={() => setUnit('miles')}
-                  className={`px-3 p-2 text-sm font-medium rounded transition-colors ${
-                    unit === 'miles'
-                      ? 'bg-black text-white shadow-sm'
-                      : 'text-gray-900 hover:text-gray-700'
-                  }`}
-                >
-                  mi
-                </button>
-                <button
-                  onClick={() => setUnit('km')}
-                  className={`px-3 p-2 text-sm font-medium rounded transition-colors ${
-                    unit === 'km'
-                      ? 'bg-black text-white shadow-sm'
-                      : 'text-gray-900 hover:text-gray-700'
-                  }`}
-                >
-                  km
-                </button>
-              </div>
-
               {/* Dropdown Menu */}
               <div className="relative" ref={menuRef}>
                 <button
@@ -344,11 +320,20 @@ export function RaceDetail({ entryId, onClose, onEdit }) {
               {(entry.finisherPhoto || entry.notes) && (
                 <div className="w-full md:w-80 flex-shrink-0 flex flex-col gap-6">
                   {entry.finisherPhoto && (
-                    <img
-                      src={entry.finisherPhoto}
-                      alt={`Finisher photo for ${entry.raceName}`}
-                      className="w-full h-auto object-contain rounded-lg"
-                    />
+                    <div className="relative group">
+                      <img
+                        src={entry.finisherPhoto}
+                        alt={`Finisher photo for ${entry.raceName}`}
+                        className="w-full h-auto object-contain rounded-lg"
+                      />
+                      <button
+                        onClick={() => setShowFinisherModal(true)}
+                        className="absolute top-2 right-2 p-2 bg-black/70 hover:bg-black/90 text-white rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                        aria-label="Expand finisher photo"
+                      >
+                        <Maximize2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   )}
                   {entry.notes && (
                     <div className="w-full">
@@ -360,7 +345,7 @@ export function RaceDetail({ entryId, onClose, onEdit }) {
               
               {/* Map on the right (or full width if no finisher photo or notes) */}
                   <div className={`${(entry.finisherPhoto || entry.notes) ? 'flex-1' : 'w-full'} max-w-5xl ${(entry.finisherPhoto || entry.notes) ? '' : 'mx-auto'}`}>
-                    <RouteVisualization routeData={entry.routeData} unit={unit} />
+                    <RouteVisualization routeData={entry.routeData} />
                   </div>
             </section>
           )}
@@ -369,7 +354,7 @@ export function RaceDetail({ entryId, onClose, onEdit }) {
               {entry.routeData && !entry.finisherPhoto && !entry.notes && (
                 <section className="flex flex-col items-center">
                   <div className="w-full max-w-5xl">
-                    <RouteVisualization routeData={entry.routeData} unit={unit} />
+                    <RouteVisualization routeData={entry.routeData} />
                   </div>
                 </section>
               )}
@@ -384,6 +369,28 @@ export function RaceDetail({ entryId, onClose, onEdit }) {
           )}
         </div>
       </main>
+
+      {/* Finisher Photo Modal */}
+      {showFinisherModal && entry.finisherPhoto && (
+        <div 
+          className="fixed inset-0 bg-black/90 z-[60] flex items-center justify-center p-4"
+          onClick={() => setShowFinisherModal(false)}
+        >
+          <button
+            onClick={() => setShowFinisherModal(false)}
+            className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors"
+            aria-label="Close modal"
+          >
+            <X className="w-6 h-6" />
+          </button>
+          <img
+            src={entry.finisherPhoto}
+            alt={`Finisher photo for ${entry.raceName}`}
+            className="max-w-full max-h-full object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }

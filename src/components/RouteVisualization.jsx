@@ -208,7 +208,7 @@ function formatTime(totalSeconds) {
 /**
  * Component for visualizing GPX route on a map
  */
-export function RouteVisualization({ routeData, unit = 'miles' }) {
+export function RouteVisualization({ routeData }) {
   // Recalculate stats if they're missing but we have coordinates with time data
   const stats = useMemo(() => {
     console.log('=== RouteVisualization Stats Debug ===');
@@ -412,10 +412,7 @@ export function RouteVisualization({ routeData, unit = 'miles' }) {
                 <div className="text-xs font-medium uppercase tracking-wide">Distance</div>
               </div>
               <div className="font-bold text-lg text-gray-900">
-                {unit === 'miles' 
-                  ? `${(stats.distance * 0.621371).toFixed(2)} mi`
-                  : `${stats.distance.toFixed(2)} km`
-                }
+                {stats.distance.toFixed(2)} km
               </div>
             </div>
           )}
@@ -445,10 +442,7 @@ export function RouteVisualization({ routeData, unit = 'miles' }) {
                 <div className="text-xs font-medium uppercase tracking-wide">Pace</div>
               </div>
               <div className="font-bold text-lg text-gray-900">
-                {unit === 'miles' 
-                  ? `${formatPace(stats.averagePacePerMile)} /mi`
-                  : `${formatPace(stats.averagePacePerMile * 1.60934)} /km`
-                }
+                {formatPace(stats.averagePacePerMile)} /mi
               </div>
             </div>
           )}
