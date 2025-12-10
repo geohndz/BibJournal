@@ -7,10 +7,37 @@ import { removeBackground } from '@imgly/background-removal';
  */
 export async function removeImageBackground(imageSource) {
   try {
+    console.log('Starting background removal...', {
+      sourceType: imageSource?.constructor?.name,
+      isFile: imageSource instanceof File,
+      isBlob: imageSource instanceof Blob,
+      isString: typeof imageSource === 'string',
+      environment: import.meta.env.MODE,
+      isProduction: import.meta.env.PROD,
+    });
+    
+    // The library should handle model loading automatically
+    // In production, it may need to load from CDN or bundled assets
     const blob = await removeBackground(imageSource);
+    
+    console.log('Background removal successful', {
+      blobSize: blob.size,
+      blobType: blob.type,
+    });
+    
     return blob;
   } catch (error) {
     console.error('Background removal failed:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+      environment: import.meta.env.MODE,
+      isProduction: import.meta.env.PROD,
+    });
+    
+    // In production, if background removal fails, we should still allow the app to work
+    // The error will be caught upstream and the original image will be used
     throw error;
   }
 }
