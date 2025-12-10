@@ -112,9 +112,9 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
           return typeA.localeCompare(typeB);
         }
         // If same type, sort by date (newest first)
-        const dateA = a.date instanceof Date ? a.date : new Date(a.date || 0);
-        const dateB = b.date instanceof Date ? b.date : new Date(b.date || 0);
-        return dateB - dateA;
+        const typeDateA = a.date instanceof Date ? a.date : new Date(a.date || 0);
+        const typeDateB = b.date instanceof Date ? b.date : new Date(b.date || 0);
+        return typeDateB - typeDateA;
       
       case 'name':
         // Sort by race name (A-Z)
@@ -124,16 +124,16 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
           return nameA.localeCompare(nameB);
         }
         // If same name, sort by date (newest first)
-        const dateA2 = a.date instanceof Date ? a.date : new Date(a.date || 0);
-        const dateB2 = b.date instanceof Date ? b.date : new Date(b.date || 0);
-        return dateB2 - dateA2;
+        const nameDateA = a.date instanceof Date ? a.date : new Date(a.date || 0);
+        const nameDateB = b.date instanceof Date ? b.date : new Date(b.date || 0);
+        return nameDateB - nameDateA;
       
       case 'date':
       default:
-        // Sort by date added (newest first) - using createdAt or updatedAt
-        const createdA = a.createdAt instanceof Date ? a.createdAt : (a.createdAt ? new Date(a.createdAt) : new Date(0));
-        const createdB = b.createdAt instanceof Date ? b.createdAt : (b.createdAt ? new Date(b.createdAt) : new Date(0));
-        return createdB - createdA;
+        // Sort by entry date (newest first)
+        const dateA = a.date instanceof Date ? a.date : new Date(a.date || 0);
+        const dateB = b.date instanceof Date ? b.date : new Date(b.date || 0);
+        return dateB - dateA;
     }
   });
 
@@ -259,7 +259,7 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
                       onChange={(e) => setSortBy(e.target.value)}
                       className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent appearance-none pr-8 cursor-pointer"
                     >
-                      <option value="date">Date Added</option>
+                      <option value="date">Date</option>
                       <option value="type">Race Type</option>
                       <option value="name">Name (A-Z)</option>
                     </select>
