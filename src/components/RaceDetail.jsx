@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRaceEntries } from '../hooks/useRaceEntries';
 import { ImageToggle } from './ImageToggle';
 import { RouteVisualization } from './RouteVisualization';
 import { formatDate } from '../lib/dateUtils';
 import { trackRaceViewed, trackRaceDeleted } from '../lib/analytics';
+import { Medal, Clock, Trophy, UserRound, Users, MoreVertical, Pencil, Trash2 } from 'lucide-react';
 
 /**
  * Race detail view component
@@ -13,10 +14,26 @@ export function RaceDetail({ entryId, onClose, onEdit }) {
   const [entry, setEntry] = useState(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const [unit, setUnit] = useState('miles'); // Default to miles
+  const menuRef = useRef(null);
 
   useEffect(() => {
     loadEntry();
   }, [entryId]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setShowMenu(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
 
   const loadEntry = async () => {
@@ -48,6 +65,8 @@ export function RaceDetail({ entryId, onClose, onEdit }) {
       }
       
       await deleteEntry(entryId);
+      // Wait a moment for UI to update before closing
+      await new Promise(resolve => setTimeout(resolve, 300));
       onClose();
     } catch (error) {
       console.error('Failed to delete entry:', error);
@@ -96,37 +115,173 @@ export function RaceDetail({ entryId, onClose, onEdit }) {
               Back
             </button>
             <div className="flex items-center gap-3">
-              <button
-                onClick={() => onEdit(entry.id)}
-                className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-              >
-                Edit
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={deleting}
-                className="px-4 py-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors disabled:opacity-50"
-              >
-                {deleting ? 'Deleting...' : 'Delete'}
-              </button>
+              {/* Units Toggle */}
+              <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+                <button
+                  onClick={() => setUnit('miles')}
+                  className={`px-3 p-2 text-sm font-medium rounded transition-colors ${
+                    unit === 'miles'
+                      ? 'bg-black text-white shadow-sm'
+                      : 'text-gray-900 hover:text-gray-700'
+                  }`}
+                >
+                  mi
+                </button>
+                <button
+                  onClick={() => setUnit('km')}
+                  className={`px-3 p-2 text-sm font-medium rounded transition-colors ${
+                    unit === 'km'
+                      ? 'bg-black text-white shadow-sm'
+                      : 'text-gray-900 hover:text-gray-700'
+                  }`}
+                >
+                  km
+                </button>
+              </div>
+
+              {/* Dropdown Menu */}
+              <div className="relative" ref={menuRef}>
+                <button
+                  onClick={() => setShowMenu(!showMenu)}
+                  className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                  aria-label="More options"
+                >
+                  <MoreVertical className="w-5 h-5" />
+                </button>
+                
+                {showMenu && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
+                    <button
+                      onClick={() => {
+                        setShowMenu(false);
+                        onEdit(entry.id);
+                      }}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors flex items-center gap-2"
+                    >
+                      <Pencil className="w-4 h-4" />
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowMenu(false);
+                        handleDelete();
+                      }}
+                      disabled={deleting}
+                      className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 flex items-center gap-2"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      {deleting ? 'Deleting...' : 'Delete'}
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
       </header>
 
-      {/* Content */}
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="space-y-12">
-          {/* Race Information - Moved to top, left-aligned */}
-          <section className="flex flex-col items-start text-left">
-            <h1 className="text-5xl font-bold text-gray-900 mb-4">{entry.raceName}</h1>
-            <div className="flex flex-wrap items-center gap-4 text-gray-600">
-              <span>{entry.raceType}</span>
-              <span>•</span>
-              <span>{entry.location}</span>
-              <span>•</span>
-              <span>{entry.date && formatDate(entry.date, 'MMMM d, yyyy')}</span>
+      {/* Content - Centered vertically */}
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 min-h-[calc(100vh-73px)] flex items-center">
+        <div className="w-full space-y-12">
+          {/* Race Information - Title and Location - Centered */}
+          <section className="flex flex-col items-center text-center">
+            <h1 className="text-5xl font-bold text-gray-900 mb-4 flex items-center gap-3 justify-center">
+              {entry.raceName}
+              {entry.isPersonalBest && (
+                <Medal className="w-8 h-8 text-yellow-500 flex-shrink-0" />
+              )}
+            </h1>
+            <div className="flex flex-wrap items-center gap-2 mb-6 justify-center">
+              {entry.raceType && (
+                <span className="bg-gray-200 text-gray-700 px-3 py-1 rounded-full text-sm font-medium">
+                  {entry.raceType}
+                </span>
+              )}
+              {entry.location && (
+                <span className="bg-gray-200 text-gray-700 px-3 py-1 rounded-full text-sm font-medium">
+                  {entry.location}
+                </span>
+              )}
+              {entry.date && (
+                <span className="bg-gray-200 text-gray-700 px-3 py-1 rounded-full text-sm font-medium">
+                  {formatDate(entry.date, 'MMMM d, yyyy')}
+                </span>
+              )}
             </div>
+            
+            {/* Race Results - Sticky note style cards */}
+            {entry.results && (
+              (entry.results.finishTime || entry.results.overallPlace || 
+               entry.results.ageGroupPlace || entry.results.division) && (
+                <div className="flex flex-wrap gap-4 justify-center mt-6">
+                  {/* Finish Time - Blue */}
+                  {entry.results.finishTime && (
+                    <div className="bg-blue-200/70 rounded-lg p-4 shadow-sm transform rotate-[-2deg] hover:rotate-0 transition-transform">
+                      <div className="flex items-center gap-2 text-blue-700 mb-2">
+                        <Clock className="w-4 h-4" />
+                        <div className="text-xs font-medium uppercase tracking-wide">Finish Time</div>
+                      </div>
+                      <div className="font-bold text-2xl text-gray-900">
+                        {entry.results.finishTime}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Overall Place - Green */}
+                  {entry.results.overallPlace && (
+                    <div className="bg-green-200/70 rounded-lg p-4 shadow-sm transform rotate-[2deg] hover:rotate-0 transition-transform">
+                      <div className="flex items-center justify-center gap-2 text-green-700 mb-2">
+                        <Trophy className="w-4 h-4" />
+                        <div className="text-xs font-medium uppercase tracking-wide">Overall Place</div>
+                      </div>
+                      <div className="flex items-baseline justify-center gap-2">
+                        <div className="font-bold text-2xl text-gray-900">
+                          {entry.results.overallPlace}
+                        </div>
+                        {entry.results.overallParticipants && (
+                          <div className="text-sm text-green-700">
+                            of {entry.results.overallParticipants}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Age Group Place - Yellow */}
+                  {entry.results.ageGroupPlace && (
+                    <div className="bg-yellow-200/70 rounded-lg p-4 shadow-sm transform rotate-[-1.5deg] hover:rotate-0 transition-transform">
+                      <div className="flex items-center justify-center gap-2 text-yellow-700 mb-2">
+                        <Users className="w-4 h-4" />
+                        <div className="text-xs font-medium uppercase tracking-wide">Age Group Place</div>
+                      </div>
+                      <div className="flex items-baseline justify-center gap-2">
+                        <div className="font-bold text-2xl text-gray-900">
+                          {entry.results.ageGroupPlace}
+                        </div>
+                        {entry.results.ageGroupParticipants && (
+                          <div className="text-sm text-yellow-700">
+                            of {entry.results.ageGroupParticipants}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Division - Pink */}
+                  {entry.results.division && (
+                    <div className="bg-pink-200/70 rounded-lg p-4 shadow-sm transform rotate-[1.5deg] hover:rotate-0 transition-transform">
+                      <div className="flex items-center gap-2 text-pink-700 mb-2">
+                        <UserRound className="w-4 h-4" />
+                        <div className="text-xs font-medium uppercase tracking-wide">Division</div>
+                      </div>
+                      <div className="font-bold text-2xl text-gray-900">
+                        {entry.results.division}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            )}
           </section>
 
           {/* Race Bib and Medal together - top aligned */}
@@ -181,40 +336,6 @@ export function RaceDetail({ entryId, onClose, onEdit }) {
             )}
           </section>
 
-          {/* Race Results */}
-          {entry.results && (
-            (entry.results.finishTime || entry.results.overallPlace || 
-             entry.results.ageGroupPlace || entry.results.division) && (
-              <section className="flex flex-col items-center text-center">
-                <dl className="max-w-2xl w-full grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {entry.results.finishTime && (
-                    <div>
-                      <dt className="text-sm font-medium text-gray-500 uppercase tracking-wide">Finish Time</dt>
-                      <dd className="mt-1 text-lg font-semibold text-gray-900">{entry.results.finishTime}</dd>
-                    </div>
-                  )}
-                  {entry.results.overallPlace && (
-                    <div>
-                      <dt className="text-sm font-medium text-gray-500 uppercase tracking-wide">Overall Place</dt>
-                      <dd className="mt-1 text-lg font-semibold text-gray-900">{entry.results.overallPlace}</dd>
-                    </div>
-                  )}
-                  {entry.results.ageGroupPlace && (
-                    <div>
-                      <dt className="text-sm font-medium text-gray-500 uppercase tracking-wide">Age Group Place</dt>
-                      <dd className="mt-1 text-lg font-semibold text-gray-900">{entry.results.ageGroupPlace}</dd>
-                    </div>
-                  )}
-                  {entry.results.division && (
-                    <div>
-                      <dt className="text-sm font-medium text-gray-500 uppercase tracking-wide">Division</dt>
-                      <dd className="mt-1 text-lg font-semibold text-gray-900">{entry.results.division}</dd>
-                    </div>
-                  )}
-                </dl>
-              </section>
-            )
-          )}
 
           {/* Route Visualization with Finisher Photo and Notes */}
           {entry.routeData && (
@@ -238,20 +359,20 @@ export function RaceDetail({ entryId, onClose, onEdit }) {
               )}
               
               {/* Map on the right (or full width if no finisher photo or notes) */}
-              <div className={`${(entry.finisherPhoto || entry.notes) ? 'flex-1' : 'w-full'} max-w-5xl ${(entry.finisherPhoto || entry.notes) ? '' : 'mx-auto'}`}>
-                <RouteVisualization routeData={entry.routeData} />
-              </div>
+                  <div className={`${(entry.finisherPhoto || entry.notes) ? 'flex-1' : 'w-full'} max-w-5xl ${(entry.finisherPhoto || entry.notes) ? '' : 'mx-auto'}`}>
+                    <RouteVisualization routeData={entry.routeData} unit={unit} />
+                  </div>
             </section>
           )}
 
-          {/* Route Visualization without Finisher Photo or Notes */}
-          {entry.routeData && !entry.finisherPhoto && !entry.notes && (
-            <section className="flex flex-col items-center">
-              <div className="w-full max-w-5xl">
-                <RouteVisualization routeData={entry.routeData} />
-              </div>
-            </section>
-          )}
+              {/* Route Visualization without Finisher Photo or Notes */}
+              {entry.routeData && !entry.finisherPhoto && !entry.notes && (
+                <section className="flex flex-col items-center">
+                  <div className="w-full max-w-5xl">
+                    <RouteVisualization routeData={entry.routeData} unit={unit} />
+                  </div>
+                </section>
+              )}
 
           {/* Notes without Route Data */}
           {entry.notes && !entry.routeData && (

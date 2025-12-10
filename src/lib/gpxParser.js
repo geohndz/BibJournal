@@ -27,12 +27,14 @@ export async function parseGPX(file) {
           const lat = parseFloat(trkpt.getAttribute('lat'));
           const lon = parseFloat(trkpt.getAttribute('lon'));
           const ele = trkpt.querySelector('ele')?.textContent;
+          const time = trkpt.querySelector('time')?.textContent;
           
           if (!isNaN(lat) && !isNaN(lon)) {
             coordinates.push({
               lat,
               lon,
               elevation: ele ? parseFloat(ele) : null,
+              time: time || null,
             });
           }
         });
@@ -65,11 +67,28 @@ export async function parseGPX(file) {
  * @param {Array} coordinates - Array of coordinate objects
  * @returns {Object} - Route statistics
  */
-function calculateRouteStats(coordinates) {
+export function calculateRouteStats(coordinates) {
   let totalDistance = 0;
   let totalElevationGain = 0;
   let minElevation = Infinity;
   let maxElevation = -Infinity;
+  let totalTimeSeconds = 0;
+  let hasTimeData = false;
+  
+  // Check if we have time data - check multiple points to be sure
+  let timeDataCount = 0;
+  for (let i = 0; i < Math.min(coordinates.length, 10); i++) {
+    if (coordinates[i].time) {
+      timeDataCount++;
+    }
+  }
+  hasTimeData = timeDataCount > 0;
+  
+  if (hasTimeData) {
+    console.log('GPX file contains time data:', timeDataCount, 'points with timestamps');
+  } else {
+    console.log('GPX file does NOT contain time data - pace and time will not be calculated');
+  }
   
   for (let i = 1; i < coordinates.length; i++) {
     const prev = coordinates[i - 1];
@@ -78,6 +97,26 @@ function calculateRouteStats(coordinates) {
     // Calculate distance using Haversine formula
     const distance = haversineDistance(prev.lat, prev.lon, curr.lat, curr.lon);
     totalDistance += distance;
+    
+    // Calculate time difference if timestamps are available
+    if (hasTimeData && prev.time && curr.time) {
+      try {
+        const prevTime = new Date(prev.time);
+        const currTime = new Date(curr.time);
+        
+        // Check if dates are valid
+        if (!isNaN(prevTime.getTime()) && !isNaN(currTime.getTime())) {
+          const timeDiff = (currTime - prevTime) / 1000; // Convert to seconds
+          // Only count reasonable time differences (between 0 and 1 hour)
+          if (timeDiff > 0 && timeDiff < 3600) {
+            totalTimeSeconds += timeDiff;
+          }
+        }
+      } catch (error) {
+        // Skip invalid time data
+        console.warn('Invalid time data in GPX:', error);
+      }
+    }
     
     // Calculate elevation changes
     if (prev.elevation !== null && curr.elevation !== null) {
@@ -89,12 +128,30 @@ function calculateRouteStats(coordinates) {
     }
   }
   
+  // Calculate pace if we have time data
+  let averagePace = null;
+  let averagePacePerMile = null;
+  if (hasTimeData && totalTimeSeconds > 0 && totalDistance > 0) {
+    // Pace in minutes per kilometer
+    const paceSecondsPerKm = totalTimeSeconds / totalDistance;
+    averagePace = paceSecondsPerKm / 60; // Convert to minutes per km
+    
+    // Pace in minutes per mile
+    const totalDistanceMiles = totalDistance * 0.621371;
+    const paceSecondsPerMile = totalTimeSeconds / totalDistanceMiles;
+    averagePacePerMile = paceSecondsPerMile / 60; // Convert to minutes per mile
+  }
+  
   return {
     distance: totalDistance, // in kilometers
     elevationGain: totalElevationGain,
     minElevation: minElevation === Infinity ? null : minElevation,
     maxElevation: maxElevation === -Infinity ? null : maxElevation,
     pointsCount: coordinates.length,
+    totalTime: hasTimeData && totalTimeSeconds > 0 ? totalTimeSeconds : null, // in seconds
+    averagePace: averagePace, // minutes per kilometer
+    averagePacePerMile: averagePacePerMile, // minutes per mile
+    hasTimeData: hasTimeData,
   };
 }
 

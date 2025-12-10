@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, LogOut, ChevronDown } from 'lucide-react';
+import { Plus, LogOut, ChevronDown, Medal } from 'lucide-react';
 import { useRaceEntries } from '../hooks/useRaceEntries';
 import { useViewMode } from '../hooks/useViewMode';
 import { EmptyState } from './EmptyState';
@@ -186,7 +186,7 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
                 className="bg-primary-600 hover:bg-primary-700 text-white font-medium px-4 py-2 rounded-lg transition-colors inline-flex items-center gap-2"
               >
                 <Plus className="w-5 h-5" />
-                Add Race
+                Add Entry
               </button>
               
               {/* User Avatar Dropdown */}
@@ -332,7 +332,7 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
                 
                 {/* Use grid view for all types when sorting by type */}
                 <GridView entries={typeEntries} onViewRace={handleViewRace} onAddRace={onAddRace} showAddRace={false} />
-                {/* Add "Add Race" card at the end of the first type only */}
+                {/* Add "Add Entry" card at the end of the first type only */}
                 {groupIndex === 0 && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-12 overflow-visible">
                     <AddRaceCard onAddRace={onAddRace} />
@@ -363,7 +363,7 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
 }
 
 /**
- * Add Race Card component - rectangular with dotted lines and plus icon
+ * Add Entry Card component - rectangular with dotted lines and plus icon
  */
 function AddRaceCard({ onAddRace }) {
   return (
@@ -468,7 +468,7 @@ function ListView({ entries, onViewRace, onAddRace, showAddRace = true }) {
             <Plus className="w-8 h-8 text-gray-400 group-hover:text-gray-600 transition-colors relative z-10" />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-gray-900 mb-1">Add Race</h3>
+            <h3 className="font-semibold text-gray-900 mb-1">Add Entry</h3>
           </div>
         </div>
       )}
@@ -618,8 +618,11 @@ function ListItemCard({ entry, onViewRace }) {
       
       {/* Text content on the right */}
       <div className="flex-1 min-w-0">
-        <h3 className="font-semibold text-gray-900 mb-1 truncate">
+        <h3 className="font-semibold text-gray-900 mb-1 truncate flex items-center gap-2">
           {entry.raceName}
+          {entry.isPersonalBest && (
+            <Medal className="w-5 h-5 text-yellow-500 flex-shrink-0" />
+          )}
         </h3>
         <p className="text-sm text-gray-500 mb-1">
           {entry.raceType} {entry.location && `• ${entry.location}`}
@@ -661,6 +664,10 @@ function RaceCard({ entry, onViewRace }) {
   // Get consistent rotation and corner positions for this entry
   const rotation = getRotationForEntry(entry.id);
   const corners = getCornerPositions(entry.id) || { medal: 'top-left', finisher: 'bottom-right' };
+
+  // Refs for medal and finisher elements
+  const medalRef = useRef(null);
+  const finisherRef = useRef(null);
 
   // Helper function to convert string ID to numeric seed
   const getIdSeed = (id, multiplier = 1) => {
@@ -711,9 +718,25 @@ function RaceCard({ entry, onViewRace }) {
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.transform = `rotate(0deg) scale(1.05)`;
+            // Add independent rotation animations to medal and finisher
+            if (medalRef.current) {
+              const additionalMedalRotation = -medalRotation + (medalRotation > 0 ? -3 : 3);
+              medalRef.current.style.transform = `rotate(${additionalMedalRotation}deg) scale(1.1)`;
+            }
+            if (finisherRef.current) {
+              const additionalFinisherRotation = -finisherRotation + (finisherRotation > 0 ? 4 : -4);
+              finisherRef.current.style.transform = `rotate(${additionalFinisherRotation}deg) scale(1.1)`;
+            }
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.transform = `rotate(${rotation}deg) scale(1)`;
+            // Reset medal and finisher rotations
+            if (medalRef.current) {
+              medalRef.current.style.transform = `rotate(${medalRotation}deg) scale(1)`;
+            }
+            if (finisherRef.current) {
+              finisherRef.current.style.transform = `rotate(${finisherRotation}deg) scale(1)`;
+            }
           }}
         >
           <img
@@ -725,7 +748,8 @@ function RaceCard({ entry, onViewRace }) {
           {/* Medal cutout overlay (background removed) */}
           {medalImageSrc && (
             <div
-              className="absolute pointer-events-none z-10"
+              ref={medalRef}
+              className="absolute pointer-events-none z-10 transition-transform duration-300 ease-out"
               style={{
                 ...getCornerStyle(corners.medal),
                 transform: `rotate(${medalRotation}deg)`,
@@ -749,7 +773,8 @@ function RaceCard({ entry, onViewRace }) {
           {/* Finisher photo polaroid overlay */}
           {finisherImageSrc && (
             <div
-              className="absolute pointer-events-none z-10"
+              ref={finisherRef}
+              className="absolute pointer-events-none z-10 transition-transform duration-300 ease-out"
               style={{
                 ...getCornerStyle(corners.finisher),
                 transform: `rotate(${finisherRotation}deg)`,
@@ -795,8 +820,11 @@ function RaceCard({ entry, onViewRace }) {
         </div>
       )}
       <div className="w-full text-center">
-        <h3 className="font-semibold text-gray-900 mb-1">
+        <h3 className="font-semibold text-gray-900 mb-1 flex items-center justify-center gap-2">
           {entry.raceName}
+          {entry.isPersonalBest && (
+            <Medal className="w-5 h-5 text-yellow-500 flex-shrink-0" />
+          )}
         </h3>
         <p className="text-sm text-gray-500 mb-1">
           {entry.raceType}

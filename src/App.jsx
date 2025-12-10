@@ -20,7 +20,7 @@ function App() {
       if (currentView === 'home') {
         trackPageView('Home');
       } else if (currentView === 'form') {
-        trackPageView(selectedEntryId ? 'Edit Race' : 'Add Race');
+        trackPageView(selectedEntryId ? 'Edit Entry' : 'Add Entry');
       } else if (currentView === 'detail') {
         trackPageView('Race Detail');
       }
@@ -38,6 +38,8 @@ function App() {
   };
 
   const handleEditRace = (entryId) => {
+    // Set the entry ID and switch to form view
+    // This will automatically "close" the detail view since only one overlay shows at a time
     setSelectedEntryId(entryId);
     setCurrentView('form');
   };

@@ -4,6 +4,7 @@ import { ImageCropper } from './ImageCropper';
 import { trackFormStarted, trackFormAbandoned, trackRaceCreated, trackRaceUpdated, trackImageUploaded, trackGPXUploaded } from '../lib/analytics';
 import { getRandomRaceImage } from '../lib/imageUtils';
 import confetti from 'canvas-confetti';
+import { Medal } from 'lucide-react';
 
 const RACE_TYPES = [
   'Marathon',
@@ -25,7 +26,11 @@ export function RaceForm({ entryId, onClose, onSave }) {
   const [saving, setSaving] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   const [showGPXInfo, setShowGPXInfo] = useState(false);
-  const [backgroundImage, setBackgroundImage] = useState(null);
+  // Initialize with a default image immediately
+  const [backgroundImage, setBackgroundImage] = useState(() => {
+    const seed = entryId || Date.now();
+    return getRandomRaceImage(seed);
+  });
   const locationInputRef = useRef(null);
   const autocompleteRef = useRef(null);
   const gpxInfoRef = useRef(null);
@@ -37,7 +42,9 @@ export function RaceForm({ entryId, onClose, onSave }) {
     results: {
       finishTime: '',
       overallPlace: '',
+      overallParticipants: '',
       ageGroupPlace: '',
+      ageGroupParticipants: '',
       division: '',
     },
     bibPhoto: null,
@@ -45,65 +52,101 @@ export function RaceForm({ entryId, onClose, onSave }) {
     medalPhoto: null,
     gpxFile: null,
     notes: '',
+    isPersonalBest: false,
   });
 
   const formSavedRef = useRef(false);
 
-  // Set random background image on mount
+  // Update background image when entryId changes (only if entryId actually changed)
   useEffect(() => {
-    setBackgroundImage(getRandomRaceImage(entryId || Date.now()));
+    const seed = entryId || Date.now();
+    const image = getRandomRaceImage(seed);
+    setBackgroundImage(image);
   }, [entryId]);
 
   // Initialize Google Places Autocomplete
   useEffect(() => {
     // Only initialize when we're on step 1 (where the location input is visible)
-    if (currentStep !== 1) return;
+    if (currentStep !== 1) {
+      // Clean up autocomplete when not on step 1
+      if (autocompleteRef.current) {
+        try {
+          window.google?.maps?.event?.clearInstanceListeners(autocompleteRef.current);
+        } catch (e) {
+          // Ignore errors during cleanup
+        }
+        autocompleteRef.current = null;
+      }
+      return;
+    }
+
+    let retryCount = 0;
+    const maxRetries = 50; // Try for up to 5 seconds (50 * 100ms)
 
     // Wait for the input to be available and Google Maps to load
     const initAutocomplete = () => {
       if (locationInputRef.current && window.google && window.google.maps && window.google.maps.places) {
         // Clean up previous autocomplete if it exists
         if (autocompleteRef.current) {
-          window.google.maps.event.clearInstanceListeners(autocompleteRef.current);
+          try {
+            window.google.maps.event.clearInstanceListeners(autocompleteRef.current);
+          } catch (e) {
+            // Ignore cleanup errors
+          }
         }
 
-        const autocomplete = new window.google.maps.places.Autocomplete(
-          locationInputRef.current,
-          {
-            types: ['geocode', 'establishment'],
-            fields: ['formatted_address', 'name', 'geometry'],
-          }
-        );
+        try {
+          const autocomplete = new window.google.maps.places.Autocomplete(
+            locationInputRef.current,
+            {
+              types: ['geocode', 'establishment'],
+              fields: ['formatted_address', 'name', 'geometry'],
+            }
+          );
 
-        autocomplete.addListener('place_changed', () => {
-          const place = autocomplete.getPlace();
-          if (place.formatted_address) {
-            setFormData((prev) => ({
-              ...prev,
-              location: place.formatted_address,
-            }));
-          } else if (place.name) {
-            setFormData((prev) => ({
-              ...prev,
-              location: place.name,
-            }));
-          }
-        });
+          autocomplete.addListener('place_changed', () => {
+            const place = autocomplete.getPlace();
+            if (place.formatted_address) {
+              setFormData((prev) => ({
+                ...prev,
+                location: place.formatted_address,
+              }));
+            } else if (place.name) {
+              setFormData((prev) => ({
+                ...prev,
+                location: place.name,
+              }));
+            }
+          });
 
-        autocompleteRef.current = autocomplete;
-      } else if (locationInputRef.current && !window.google) {
-        // If Google Maps isn't loaded yet, wait a bit and try again
-        setTimeout(initAutocomplete, 100);
+          autocompleteRef.current = autocomplete;
+          console.log('Google Places Autocomplete initialized successfully');
+        } catch (error) {
+          console.error('Error initializing Google Places Autocomplete:', error);
+        }
+      } else {
+        // If Google Maps isn't loaded yet or input isn't ready, wait and try again
+        retryCount++;
+        if (retryCount < maxRetries) {
+          setTimeout(initAutocomplete, 100);
+        } else {
+          console.warn('Google Places Autocomplete: Max retries reached. Google Maps API may not be loaded.');
+        }
       }
     };
 
     // Small delay to ensure the input is rendered
-    const timeoutId = setTimeout(initAutocomplete, 100);
+    const timeoutId = setTimeout(initAutocomplete, 200);
 
     return () => {
       clearTimeout(timeoutId);
       if (autocompleteRef.current) {
-        window.google?.maps?.event?.clearInstanceListeners(autocompleteRef.current);
+        try {
+          window.google?.maps?.event?.clearInstanceListeners(autocompleteRef.current);
+        } catch (e) {
+          // Ignore cleanup errors
+        }
+        autocompleteRef.current = null;
       }
     };
   }, [currentStep]);
@@ -130,6 +173,9 @@ export function RaceForm({ entryId, onClose, onSave }) {
     
     if (entryId) {
       loadEntry();
+    } else {
+      // If no entryId, ensure loading is false
+      setLoading(false);
     }
     
     // Track form abandoned on unmount if not saved
@@ -138,11 +184,26 @@ export function RaceForm({ entryId, onClose, onSave }) {
         trackFormAbandoned(!!entryId);
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entryId]);
 
   const loadEntry = async () => {
     try {
-      const entry = await getEntry(entryId);
+      setLoading(true);
+      console.log('Loading entry with ID:', entryId);
+      
+      // Add a timeout to prevent infinite loading
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Loading timeout - entry may not exist')), 10000)
+      );
+      
+      const entry = await Promise.race([
+        getEntry(entryId),
+        timeoutPromise
+      ]);
+      
+      console.log('Entry loaded:', entry);
+      
       if (entry) {
         setFormData({
           raceName: entry.raceName || '',
@@ -152,13 +213,19 @@ export function RaceForm({ entryId, onClose, onSave }) {
             : (typeof entry.location === 'object' && entry.location !== null && entry.location.name
                 ? entry.location.name
                 : ''),
-          date: entry.date ? (typeof entry.date === 'string' && entry.date.includes('T') 
-            ? new Date(entry.date).toISOString().split('T')[0] 
-            : entry.date.split('T')[0]) : '',
+          date: entry.date ? (
+            typeof entry.date === 'string' 
+              ? (entry.date.includes('T') ? entry.date.split('T')[0] : entry.date)
+              : (entry.date instanceof Date 
+                  ? entry.date.toISOString().split('T')[0]
+                  : new Date(entry.date).toISOString().split('T')[0])
+          ) : '',
           results: {
             finishTime: entry.results?.finishTime || '',
             overallPlace: entry.results?.overallPlace || '',
+            overallParticipants: entry.results?.overallParticipants || '',
             ageGroupPlace: entry.results?.ageGroupPlace || '',
+            ageGroupParticipants: entry.results?.ageGroupParticipants || '',
             division: entry.results?.division || '',
           },
           bibPhoto: entry.bibPhoto || null,
@@ -174,12 +241,20 @@ export function RaceForm({ entryId, onClose, onSave }) {
                         : null)))
             : null,
           notes: entry.notes || '',
+          isPersonalBest: entry.isPersonalBest || false,
         });
+        setLoading(false);
+      } else {
+        console.error('Entry not found');
+        alert('Entry not found. Please try again.');
+        setLoading(false);
       }
-      setLoading(false);
     } catch (error) {
       console.error('Failed to load entry:', error);
+      alert(`Failed to load entry: ${error.message || 'Unknown error'}. Please try again.`);
       setLoading(false);
+      // Close the form on error so user can try again
+      onClose();
     }
   };
 
@@ -219,7 +294,13 @@ export function RaceForm({ entryId, onClose, onSave }) {
     }
   };
 
-  const handleNextStep = () => {
+  const handleNextStep = (e) => {
+    // Prevent any form submission
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
     // Validate step 1 before proceeding
     if (currentStep === 1) {
       if (!formData.raceName.trim()) {
@@ -238,8 +319,8 @@ export function RaceForm({ entryId, onClose, onSave }) {
         alert('Date is required');
         return;
       }
+      setCurrentStep(2);
     }
-    setCurrentStep(2);
   };
 
   const handlePreviousStep = () => {
@@ -284,6 +365,8 @@ export function RaceForm({ entryId, onClose, onSave }) {
       
       if (entryId) {
         trackRaceUpdated(formData.raceType);
+        // Wait a moment for UI to update before closing
+        await new Promise(resolve => setTimeout(resolve, 300));
       } else {
         trackRaceCreated(formData.raceType, hasBibPhoto, hasFinisherPhoto, hasMedalPhoto, hasGPX);
         
@@ -317,6 +400,9 @@ export function RaceForm({ entryId, onClose, onSave }) {
             origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 }
           });
         }, 250);
+        
+        // Wait for confetti to start and entries to refresh before closing
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
       
       onClose();
@@ -342,35 +428,33 @@ export function RaceForm({ entryId, onClose, onSave }) {
   if (loading) {
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg p-8">Loading...</div>
+        <div className="bg-white rounded-lg p-8">
+          <div className="text-center">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mb-4"></div>
+            <p>Loading entry...</p>
+          </div>
+        </div>
       </div>
     );
   }
 
-  if (!backgroundImage) {
-    return null;
-  }
+  // Ensure we have a background image - always use state if available
+  const displayBackgroundImage = backgroundImage;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="w-full max-w-5xl bg-white rounded-lg shadow-2xl overflow-hidden flex max-h-[90vh]">
         {/* Left Side - Image (40%) */}
-        <div 
-          className="hidden md:block w-[40%] relative"
-          style={{
-            backgroundImage: `url(${backgroundImage})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            backgroundRepeat: 'no-repeat',
-          }}
-        >
-          {/* Dark gradient overlay from top */}
-          <div 
-            className="absolute inset-0 z-0"
-            style={{
-              background: 'linear-gradient(to bottom, rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0.3) 20%, rgba(0, 0, 0, 0.2) 40%, transparent 60%)',
-            }}
-          ></div>
+            <div 
+              className="hidden md:block w-[40%] relative"
+              style={{
+                backgroundImage: displayBackgroundImage ? `url(${displayBackgroundImage})` : 'none',
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat',
+                backgroundColor: '#f3f4f6', // Fallback background color
+              }}
+            >
         </div>
 
         {/* Right Side - Form (60%) */}
@@ -379,7 +463,7 @@ export function RaceForm({ entryId, onClose, onSave }) {
           <div className="border-b border-gray-200 px-6 py-4 flex items-center justify-between sticky top-0 bg-white z-10">
             <div>
               <h2 className="text-2xl font-bold text-gray-900">
-                {entryId ? 'Edit Race' : 'Add Race'}
+                {entryId ? 'Edit Entry' : 'Add Entry'}
               </h2>
               <p className="text-sm text-gray-500 mt-1">Step {currentStep} of 2</p>
             </div>
@@ -395,7 +479,19 @@ export function RaceForm({ entryId, onClose, onSave }) {
 
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="flex-1 p-6 space-y-6">
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault(); // Always prevent default first
+              // Only submit if we're on step 2
+              if (currentStep === 2) {
+                handleSubmit(e);
+              } else {
+                // On step 1, go to next step instead of submitting
+                handleNextStep(e);
+              }
+            }} 
+            className="flex-1 p-6 space-y-6"
+          >
             {currentStep === 1 ? (
               /* Step 1: Typed Information */
               <div className="space-y-6">
@@ -495,23 +591,45 @@ export function RaceForm({ entryId, onClose, onSave }) {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Overall Place
                   </label>
-                  <input
-                    type="number"
-                    value={formData.results.overallPlace}
-                    onChange={(e) => handleChange('results.overallPlace', e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      value={formData.results.overallPlace}
+                      onChange={(e) => handleChange('results.overallPlace', e.target.value)}
+                      placeholder="Place"
+                      className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    />
+                    <span className="flex items-center text-gray-500 text-sm">of</span>
+                    <input
+                      type="number"
+                      value={formData.results.overallParticipants}
+                      onChange={(e) => handleChange('results.overallParticipants', e.target.value)}
+                      placeholder="Total"
+                      className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    />
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Age Group Place
                   </label>
-                  <input
-                    type="number"
-                    value={formData.results.ageGroupPlace}
-                    onChange={(e) => handleChange('results.ageGroupPlace', e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      value={formData.results.ageGroupPlace}
+                      onChange={(e) => handleChange('results.ageGroupPlace', e.target.value)}
+                      placeholder="Place"
+                      className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    />
+                    <span className="flex items-center text-gray-500 text-sm">of</span>
+                    <input
+                      type="number"
+                      value={formData.results.ageGroupParticipants}
+                      onChange={(e) => handleChange('results.ageGroupParticipants', e.target.value)}
+                      placeholder="Total"
+                      className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    />
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -525,6 +643,21 @@ export function RaceForm({ entryId, onClose, onSave }) {
                   />
                 </div>
               </div>
+            </div>
+
+            {/* Personal Best Toggle */}
+            <div className="pt-4">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.isPersonalBest}
+                  onChange={(e) => handleChange('isPersonalBest', e.target.checked)}
+                  className="w-5 h-5 text-yellow-500 border-gray-300 rounded focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 cursor-pointer"
+                />
+                <span className="text-sm font-medium text-gray-700">
+                  New Personal Best
+                </span>
+              </label>
             </div>
               </div>
             ) : (
@@ -672,7 +805,7 @@ export function RaceForm({ entryId, onClose, onSave }) {
                     disabled={saving}
                     className="px-6 py-2 bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
-                    {saving ? 'Saving...' : entryId ? 'Update Race' : 'Create Race'}
+                    {saving ? 'Saving...' : entryId ? 'Update Entry' : 'Create Entry'}
                   </button>
                 )}
               </div>
