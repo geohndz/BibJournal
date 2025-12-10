@@ -44,11 +44,19 @@ export function Login({ onClose }) {
     setLoading(true);
     try {
       await loginWithGoogle();
+      // If we get here, popup succeeded (redirect would have navigated away)
       trackLogin('google');
       if (onClose) onClose();
+      setLoading(false);
     } catch (err) {
+      // If popup was closed or blocked, the redirect will happen
+      // For other errors, show them
+      if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/popup-blocked') {
+        // Redirect is being used - page will reload, so don't show error
+        // Keep loading state since page will redirect
+        return;
+      }
       setError(err.message || 'Failed to sign in with Google');
-    } finally {
       setLoading(false);
     }
   };
