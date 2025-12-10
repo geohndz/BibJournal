@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Home } from './components/Home';
 import { RaceForm } from './components/RaceForm';
 import { RaceDetail } from './components/RaceDetail';
@@ -9,10 +9,11 @@ import { trackPageView, trackLogout } from './lib/analytics';
 
 function App() {
   const { currentUser, logout } = useAuth();
-  const { addEntry, updateEntry } = useRaceEntries();
+  const { addEntry, updateEntry, refreshEntries } = useRaceEntries();
   const [currentView, setCurrentView] = useState('home');
   const [selectedEntryId, setSelectedEntryId] = useState(null);
   const [showLogin, setShowLogin] = useState(false);
+  const homeRef = useRef(null);
 
   // Track page views
   useEffect(() => {
@@ -44,12 +45,20 @@ function App() {
     setCurrentView('form');
   };
 
-  const handleCloseForm = () => {
+  const handleCloseForm = async () => {
+    // Refresh entries when form closes to ensure latest data is shown
+    if (refreshEntries) {
+      await refreshEntries();
+    }
     setCurrentView('home');
     setSelectedEntryId(null);
   };
 
-  const handleCloseDetail = () => {
+  const handleCloseDetail = async () => {
+    // Refresh entries when detail closes (in case entry was deleted)
+    if (refreshEntries) {
+      await refreshEntries();
+    }
     setCurrentView('home');
     setSelectedEntryId(null);
   };
@@ -60,6 +69,9 @@ function App() {
     } else {
       await addEntry(formData);
     }
+    // Ensure entries are refreshed before closing modal
+    // The hook should handle this, but we'll add a small delay to ensure it completes
+    await new Promise(resolve => setTimeout(resolve, 300));
   };
 
   const handleLogout = async () => {

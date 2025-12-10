@@ -44,6 +44,38 @@ export function useRaceEntries() {
     try {
       const processedEntry = await processEntryImages(entryData, null, currentUser.uid);
       const id = await firestoreDb.addEntry(currentUser.uid, processedEntry);
+      
+      // If medal photo background removal is in progress, update entry when it completes
+      if (entryData.medalPhoto && entryData.medalPhoto instanceof File) {
+        // The background removal was started in processEntryImages, but we need to update the entry when it completes
+        // We'll handle this by updating the entry after background removal finishes
+        const compressedOriginal = await compressImage(entryData.medalPhoto);
+        removeImageBackground(compressedOriginal)
+          .then((processedBlob) => {
+            return cropToContentBounds(processedBlob);
+          })
+          .then((croppedBlob) => {
+            return firestoreDb.uploadImage(currentUser.uid, croppedBlob, 'medal-photos');
+          })
+          .then((processedUrl) => {
+            // Update the entry with processed version
+            return firestoreDb.updateEntry(id, {
+              medalPhoto: {
+                original: processedEntry.medalPhoto.original,
+                processed: processedUrl,
+                useProcessed: true,
+              }
+            });
+          })
+          .then(() => {
+            // Refresh entries to show updated medal
+            loadEntries();
+          })
+          .catch((bgError) => {
+            console.warn('Background removal/cropping failed for medal, using original:', bgError);
+          });
+      }
+      
       // Wait for entries to refresh before returning
       await loadEntries();
       return id;
@@ -61,6 +93,36 @@ export function useRaceEntries() {
     try {
       const processedEntry = await processEntryImages(entryData, id, currentUser.uid);
       await firestoreDb.updateEntry(id, processedEntry);
+      
+      // If medal photo background removal is needed (new file uploaded)
+      if (entryData.medalPhoto && entryData.medalPhoto instanceof File) {
+        const compressedOriginal = await compressImage(entryData.medalPhoto);
+        removeImageBackground(compressedOriginal)
+          .then((processedBlob) => {
+            return cropToContentBounds(processedBlob);
+          })
+          .then((croppedBlob) => {
+            return firestoreDb.uploadImage(currentUser.uid, croppedBlob, 'medal-photos');
+          })
+          .then((processedUrl) => {
+            // Update the entry with processed version
+            return firestoreDb.updateEntry(id, {
+              medalPhoto: {
+                original: processedEntry.medalPhoto.original,
+                processed: processedUrl,
+                useProcessed: true,
+              }
+            });
+          })
+          .then(() => {
+            // Refresh entries to show updated medal
+            loadEntries();
+          })
+          .catch((bgError) => {
+            console.warn('Background removal/cropping failed for medal, using original:', bgError);
+          });
+      }
+      
       await loadEntries();
     } catch (error) {
       console.error('Failed to update entry:', error);
@@ -243,25 +305,8 @@ async function processEntryImages(entryData, existingId = null, userId = null) {
         useProcessed: false, // Don't use processed version initially
       };
       
-      // Process background removal asynchronously (don't wait for it - this is slow)
-      // This will update the entry later with the processed version
-      removeImageBackground(compressedOriginal)
-        .then((processedBlob) => {
-          return cropToContentBounds(processedBlob);
-        })
-        .then((croppedBlob) => {
-          return firestoreDb.uploadImage(userId, croppedBlob, 'medal-photos');
-        })
-        .then((processedUrl) => {
-          // Update the entry with processed version
-          // We'll need to get the entry ID after it's created, so we'll handle this in addEntry/updateEntry
-          // For now, just log - we can enhance this later if needed
-          console.log('Medal background removal completed:', processedUrl);
-        })
-        .catch((bgError) => {
-          console.warn('Background removal/cropping failed for medal, using original:', bgError);
-          // If background removal fails, original is already set and will be used
-        });
+      // Background removal will be handled in addEntry/updateEntry after entry ID is available
+      // We don't start it here to avoid duplicate processing
     } catch (error) {
       console.error('Failed to process medal photo:', error);
       throw error;

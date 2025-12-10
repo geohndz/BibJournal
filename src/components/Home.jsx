@@ -24,7 +24,7 @@ const RACE_TYPES = [
 ];
 
 export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
-  const { entries, loading } = useRaceEntries();
+  const { entries, loading, refreshEntries } = useRaceEntries();
   const { viewMode, setViewMode, VIEW_MODES } = useViewMode();
   const [selectedFilters, setSelectedFilters] = useState([]);
   const [sortBy, setSortBy] = useState('date'); // 'date', 'type', 'name'
@@ -152,7 +152,7 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
     : null;
 
   if (entries.length === 0) {
-    return <EmptyState onAddRace={onAddRace} />;
+    return <EmptyState onAddRace={onAddRace} currentUser={currentUser} onLogout={onLogout} />;
   }
 
   return (

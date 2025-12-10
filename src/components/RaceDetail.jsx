@@ -65,8 +65,8 @@ export function RaceDetail({ entryId, onClose, onEdit }) {
       }
       
       await deleteEntry(entryId);
-      // Wait a moment for UI to update before closing
-      await new Promise(resolve => setTimeout(resolve, 300));
+      // Wait for entries to refresh before closing
+      await new Promise(resolve => setTimeout(resolve, 500));
       onClose();
     } catch (error) {
       console.error('Failed to delete entry:', error);
