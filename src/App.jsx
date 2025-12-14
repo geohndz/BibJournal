@@ -60,6 +60,11 @@ function App() {
     setSelectedEntryId(null);
   };
 
+  const handleDeleteEntry = async () => {
+    // Force refresh after deletion
+    setRefreshKey(prev => prev + 1);
+  };
+
   const handleSaveRace = async (formData) => {
     if (selectedEntryId) {
       await updateEntry(selectedEntryId, formData);
@@ -115,6 +120,7 @@ function App() {
           entryId={selectedEntryId}
           onClose={handleCloseDetail}
           onEdit={handleEditRace}
+          onDelete={handleDeleteEntry}
         />
       )}
     </div>

@@ -9,7 +9,7 @@ import { Medal, Clock, Trophy, UserRound, Users, MoreVertical, Pencil, Trash2, M
 /**
  * Race detail view component
  */
-export function RaceDetail({ entryId, onClose, onEdit }) {
+export function RaceDetail({ entryId, onClose, onEdit, onDelete }) {
   const { getEntry, deleteEntry } = useRaceEntries();
   const [entry, setEntry] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -65,8 +65,14 @@ export function RaceDetail({ entryId, onClose, onEdit }) {
       }
       
       await deleteEntry(entryId);
+      
+      // Notify parent to refresh entries
+      if (onDelete) {
+        onDelete();
+      }
+      
       // Wait a bit longer for entries to refresh and propagate
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise(resolve => setTimeout(resolve, 500));
       onClose();
     } catch (error) {
       console.error('Failed to delete entry:', error);
