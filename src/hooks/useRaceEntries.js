@@ -131,158 +131,164 @@ function dataURLtoBlob(dataURL) {
 
 /**
  * Process entry images - compress and upload to Firebase Storage
+ * Optimized to parallelize uploads where possible
  */
 async function processEntryImages(entryData, existingId = null, userId = null) {
   const processed = { ...entryData };
 
-  // Process bib photo (already cropped by user)
-  if (entryData.bibPhoto && entryData.bibPhoto instanceof File) {
-    try {
-      // Compress the cropped image
-      const compressed = await compressImage(entryData.bibPhoto);
-      
-      // Upload to Firebase Storage
-      const originalBlob = dataURLtoBlob(await blobToDataURL(compressed));
-      const originalUrl = await firestoreDb.uploadImage(userId, originalBlob, 'bib-photos');
-      
-      processed.bibPhoto = {
-        original: originalUrl,
-        cropped: originalUrl,
-        useCropped: true,
-      };
-    } catch (error) {
-      console.error('Failed to process bib photo:', error);
-      throw error;
-    }
-  } else if (entryData.bibPhoto && (typeof entryData.bibPhoto === 'object' && !(entryData.bibPhoto instanceof File))) {
-    // Already processed, keep as is (for updates)
-    // Handle legacy format (processed) by converting to cropped
-    if (entryData.bibPhoto.processed) {
-      processed.bibPhoto = {
-        original: entryData.bibPhoto.original || entryData.bibPhoto.processed,
-        cropped: entryData.bibPhoto.processed,
-        useCropped: entryData.bibPhoto.useProcessed !== false,
-      };
-    } else {
-      processed.bibPhoto = entryData.bibPhoto;
-    }
-  } else if (entryData.bibPhoto && typeof entryData.bibPhoto === 'string') {
-    // Check if it's a data URL (legacy) or already a storage URL
-    if (entryData.bibPhoto.startsWith('data:')) {
-      // Legacy data URL - convert to blob and upload
+  // Helper function to process bib photo
+  const processBibPhoto = async () => {
+    if (entryData.bibPhoto && entryData.bibPhoto instanceof File) {
       try {
-        const blob = dataURLtoBlob(entryData.bibPhoto);
-        const url = await firestoreDb.uploadImage(userId, blob, 'bib-photos');
-        processed.bibPhoto = {
-          original: url,
-          cropped: url,
+        // Compress the cropped image
+        const compressed = await compressImage(entryData.bibPhoto);
+        const originalBlob = dataURLtoBlob(await blobToDataURL(compressed));
+        const originalUrl = await firestoreDb.uploadImage(userId, originalBlob, 'bib-photos');
+        
+        return {
+          original: originalUrl,
+          cropped: originalUrl,
           useCropped: true,
         };
       } catch (error) {
-        console.error('Failed to upload legacy bib photo:', error);
-        // Keep as is if upload fails
-        processed.bibPhoto = {
-          original: entryData.bibPhoto,
-          cropped: entryData.bibPhoto,
-          useCropped: true,
+        console.error('Failed to process bib photo:', error);
+        throw error;
+      }
+    } else if (entryData.bibPhoto && (typeof entryData.bibPhoto === 'object' && !(entryData.bibPhoto instanceof File))) {
+      // Already processed, keep as is (for updates)
+      if (entryData.bibPhoto.processed) {
+        return {
+          original: entryData.bibPhoto.original || entryData.bibPhoto.processed,
+          cropped: entryData.bibPhoto.processed,
+          useCropped: entryData.bibPhoto.useProcessed !== false,
         };
       }
-    } else {
-      // Already a storage URL
-      processed.bibPhoto = {
+      return entryData.bibPhoto;
+    } else if (entryData.bibPhoto && typeof entryData.bibPhoto === 'string') {
+      if (entryData.bibPhoto.startsWith('data:')) {
+        try {
+          const blob = dataURLtoBlob(entryData.bibPhoto);
+          const url = await firestoreDb.uploadImage(userId, blob, 'bib-photos');
+          return {
+            original: url,
+            cropped: url,
+            useCropped: true,
+          };
+        } catch (error) {
+          console.error('Failed to upload legacy bib photo:', error);
+          return {
+            original: entryData.bibPhoto,
+            cropped: entryData.bibPhoto,
+            useCropped: true,
+          };
+        }
+      }
+      return {
         original: entryData.bibPhoto,
         cropped: entryData.bibPhoto,
         useCropped: true,
       };
     }
-  }
+    return entryData.bibPhoto;
+  };
 
-  // Process finisher photo
-  if (entryData.finisherPhoto && entryData.finisherPhoto instanceof File) {
-    try {
-      const compressed = await compressImage(entryData.finisherPhoto);
-      const blob = dataURLtoBlob(await blobToDataURL(compressed));
-      processed.finisherPhoto = await firestoreDb.uploadImage(userId, blob, 'finisher-photos');
-    } catch (error) {
-      console.error('Failed to process finisher photo:', error);
-      throw error;
-    }
-  } else if (entryData.finisherPhoto) {
-    // Check if it's a data URL (legacy) or already a storage URL
-    const finisherPhoto = typeof entryData.finisherPhoto === 'string' 
-      ? entryData.finisherPhoto 
-      : entryData.finisherPhoto;
-    
-    if (typeof finisherPhoto === 'string' && finisherPhoto.startsWith('data:')) {
-      // Legacy data URL - convert to blob and upload
+  // Helper function to process finisher photo
+  const processFinisherPhoto = async () => {
+    if (entryData.finisherPhoto && entryData.finisherPhoto instanceof File) {
       try {
-        const blob = dataURLtoBlob(finisherPhoto);
-        processed.finisherPhoto = await firestoreDb.uploadImage(userId, blob, 'finisher-photos');
+        const compressed = await compressImage(entryData.finisherPhoto);
+        const blob = dataURLtoBlob(await blobToDataURL(compressed));
+        return await firestoreDb.uploadImage(userId, blob, 'finisher-photos');
       } catch (error) {
-        console.error('Failed to upload legacy finisher photo:', error);
-        processed.finisherPhoto = finisherPhoto; // Keep as is if upload fails
+        console.error('Failed to process finisher photo:', error);
+        throw error;
       }
-    } else {
-      // Already a storage URL or object
-      processed.finisherPhoto = finisherPhoto;
+    } else if (entryData.finisherPhoto) {
+      const finisherPhoto = typeof entryData.finisherPhoto === 'string' 
+        ? entryData.finisherPhoto 
+        : entryData.finisherPhoto;
+      
+      if (typeof finisherPhoto === 'string' && finisherPhoto.startsWith('data:')) {
+        try {
+          const blob = dataURLtoBlob(finisherPhoto);
+          return await firestoreDb.uploadImage(userId, blob, 'finisher-photos');
+        } catch (error) {
+          console.error('Failed to upload legacy finisher photo:', error);
+          return finisherPhoto;
+        }
+      }
+      return finisherPhoto;
     }
-  }
+    return entryData.finisherPhoto;
+  };
 
-  // Process medal photo (remove background synchronously, store only processed version)
-  if (entryData.medalPhoto && entryData.medalPhoto instanceof File) {
-    try {
-      // Compress original first
-      const compressedOriginal = await compressImage(entryData.medalPhoto);
-      
-      // Remove background (this is the only version we'll save)
-      const processedBlob = await removeImageBackground(compressedOriginal);
-      
-      // Crop to content bounds
-      const croppedBlob = await cropToContentBounds(processedBlob);
-      
-      // Upload processed version to Storage
-      const processedUrl = await firestoreDb.uploadImage(userId, croppedBlob, 'medal-photos');
-      
-      // Store only the processed version (as a string, like finisherPhoto)
-      processed.medalPhoto = processedUrl;
-    } catch (error) {
-      console.error('Failed to process medal photo (background removal):', error);
-      // If background removal fails, we could either:
-      // 1. Throw error (user must retry)
-      // 2. Upload original (but user wants only processed)
-      // For now, we'll throw so user knows it failed
-      throw new Error('Failed to remove background from medal photo. Please try again.');
-    }
-  } else if (entryData.medalPhoto && (typeof entryData.medalPhoto === 'object' && !(entryData.medalPhoto instanceof File))) {
-    // Legacy format - convert to string (use processed if available, otherwise original)
-    if (entryData.medalPhoto.processed) {
-      processed.medalPhoto = entryData.medalPhoto.processed;
-    } else if (entryData.medalPhoto.cropped) {
-      processed.medalPhoto = entryData.medalPhoto.cropped;
-    } else if (entryData.medalPhoto.original) {
-      processed.medalPhoto = entryData.medalPhoto.original;
-    } else {
-      processed.medalPhoto = entryData.medalPhoto;
-    }
-  } else if (entryData.medalPhoto && typeof entryData.medalPhoto === 'string') {
-    // Check if it's a data URL (legacy) or already a storage URL
-    if (entryData.medalPhoto.startsWith('data:')) {
-      // Legacy data URL - convert to blob and upload
+  // Helper function to process medal photo (background removal is CPU-intensive, so keep sequential)
+  const processMedalPhoto = async () => {
+    if (entryData.medalPhoto && entryData.medalPhoto instanceof File) {
       try {
-        const blob = dataURLtoBlob(entryData.medalPhoto);
-        const url = await firestoreDb.uploadImage(userId, blob, 'medal-photos');
-        processed.medalPhoto = url;
+        // Compress original first
+        const compressedOriginal = await compressImage(entryData.medalPhoto);
+        
+        // Remove background (this is CPU-intensive but necessary)
+        const processedBlob = await removeImageBackground(compressedOriginal);
+        
+        // Crop to content bounds
+        const croppedBlob = await cropToContentBounds(processedBlob);
+        
+        // Upload processed version to Storage
+        const processedUrl = await firestoreDb.uploadImage(userId, croppedBlob, 'medal-photos');
+        
+        return processedUrl;
       } catch (error) {
-        console.error('Failed to upload legacy medal photo:', error);
-        processed.medalPhoto = entryData.medalPhoto; // Keep as is if upload fails
+        console.error('Failed to process medal photo (background removal):', error);
+        // If background removal fails, upload original as fallback instead of throwing
+        // This prevents the entire save from failing
+        try {
+          const compressed = await compressImage(entryData.medalPhoto);
+          const blob = dataURLtoBlob(await blobToDataURL(compressed));
+          return await firestoreDb.uploadImage(userId, blob, 'medal-photos');
+        } catch (uploadError) {
+          console.error('Failed to upload medal photo fallback:', uploadError);
+          throw new Error('Failed to process medal photo. Please try again.');
+        }
       }
-    } else {
-      // Already a storage URL - keep as is
-      processed.medalPhoto = entryData.medalPhoto;
+    } else if (entryData.medalPhoto && (typeof entryData.medalPhoto === 'object' && !(entryData.medalPhoto instanceof File))) {
+      if (entryData.medalPhoto.processed) {
+        return entryData.medalPhoto.processed;
+      } else if (entryData.medalPhoto.cropped) {
+        return entryData.medalPhoto.cropped;
+      } else if (entryData.medalPhoto.original) {
+        return entryData.medalPhoto.original;
+      }
+      return entryData.medalPhoto;
+    } else if (entryData.medalPhoto && typeof entryData.medalPhoto === 'string') {
+      if (entryData.medalPhoto.startsWith('data:')) {
+        try {
+          const blob = dataURLtoBlob(entryData.medalPhoto);
+          return await firestoreDb.uploadImage(userId, blob, 'medal-photos');
+        } catch (error) {
+          console.error('Failed to upload legacy medal photo:', error);
+          return entryData.medalPhoto;
+        }
+      }
+      return entryData.medalPhoto;
     }
-  }
+    return entryData.medalPhoto;
+  };
 
-  // Process GPX file
+  // Process images in parallel where possible
+  // Bib and finisher can be processed in parallel, but medal needs to be sequential due to CPU-intensive background removal
+  const [bibPhoto, finisherPhoto, medalPhoto] = await Promise.all([
+    processBibPhoto(),
+    processFinisherPhoto(),
+    processMedalPhoto(),
+  ]);
+
+  processed.bibPhoto = bibPhoto;
+  processed.finisherPhoto = finisherPhoto;
+  processed.medalPhoto = medalPhoto;
+
+  // Process GPX file (independent of images)
   if (entryData.gpxFile && entryData.gpxFile instanceof File) {
     try {
       const routeData = await parseGPX(entryData.gpxFile);

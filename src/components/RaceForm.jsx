@@ -365,8 +365,8 @@ export function RaceForm({ entryId, onClose, onSave }) {
       
       if (entryId) {
         trackRaceUpdated(formData.raceType);
-        // Wait a moment for UI to update before closing
-        await new Promise(resolve => setTimeout(resolve, 300));
+        // Wait for entries to refresh before closing
+        await new Promise(resolve => setTimeout(resolve, 500));
       } else {
         trackRaceCreated(formData.raceType, hasBibPhoto, hasFinisherPhoto, hasMedalPhoto, hasGPX);
         
@@ -402,7 +402,8 @@ export function RaceForm({ entryId, onClose, onSave }) {
         }, 250);
         
         // Wait for confetti to start and entries to refresh before closing
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Increased wait time to ensure entries are fully loaded
+        await new Promise(resolve => setTimeout(resolve, 1500));
       }
       
       onClose();

@@ -596,6 +596,7 @@ function ListItemCard({ entry, onViewRace }) {
             src={bibImageSrc}
             alt={`Bib for ${entry.raceName}`}
             className="w-24 h-24 object-contain rounded-lg"
+            loading="lazy"
           />
         </div>
       ) : (
@@ -741,6 +742,7 @@ function RaceCard({ entry, onViewRace }) {
             src={bibImageSrc}
             alt={`Bib for ${entry.raceName}`}
             className="w-full h-auto object-contain rounded-lg"
+            loading="lazy"
           />
           
           {/* Medal cutout overlay (background removed) */}
@@ -761,6 +763,7 @@ function RaceCard({ entry, onViewRace }) {
                 src={medalImageSrc}
                 alt={`Medal for ${entry.raceName}`}
                 className="w-full h-auto object-contain rounded-lg"
+                loading="lazy"
                 style={{
                   display: 'block',
                 }}
@@ -794,6 +797,7 @@ function RaceCard({ entry, onViewRace }) {
                   src={finisherImageSrc}
                   alt={`Finisher photo for ${entry.raceName}`}
                   className="w-full h-auto object-cover"
+                  loading="lazy"
                   style={{ display: 'block' }}
                 />
               </div>

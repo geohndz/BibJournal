@@ -46,10 +46,8 @@ function App() {
   };
 
   const handleCloseForm = async () => {
-    // Refresh entries when form closes to ensure latest data is shown
-    if (refreshEntries) {
-      await refreshEntries();
-    }
+    // Entries are already refreshed by the hook after save
+    // Just close the form view
     setCurrentView('home');
     setSelectedEntryId(null);
   };
@@ -69,9 +67,8 @@ function App() {
     } else {
       await addEntry(formData);
     }
-    // Ensure entries are refreshed before closing modal
-    // The hook should handle this, but we'll add a small delay to ensure it completes
-    await new Promise(resolve => setTimeout(resolve, 300));
+    // The hook already handles refreshEntries() after addEntry/updateEntry
+    // No additional delay needed - the form will wait for refresh in RaceForm component
   };
 
   const handleLogout = async () => {
