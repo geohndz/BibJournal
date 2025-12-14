@@ -295,14 +295,10 @@ export function RaceDetail({ entryId, onClose, onEdit }) {
                     {/* Medal image - larger size */}
                     <div className="relative z-10 w-full h-full flex items-center justify-center">
                       <div className="w-full h-full max-w-none max-h-full" style={{ transform: 'scale(1.8)' }}>
-                        <ImageToggle
-                          original={entry.medalPhoto.original}
-                          cropped={entry.medalPhoto.cropped}
-                          useCropped={entry.medalPhoto.useCropped}
-                          processed={entry.medalPhoto.processed}
-                          useProcessed={entry.medalPhoto.useProcessed}
+                        <img
+                          src={typeof entry.medalPhoto === 'string' ? entry.medalPhoto : (entry.medalPhoto?.processed || entry.medalPhoto?.original)}
                           alt={`Medal for ${entry.raceName}`}
-                          showToggle={false}
+                          className="w-full h-auto rounded-lg"
                         />
                       </div>
                     </div>

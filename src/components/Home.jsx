@@ -652,12 +652,10 @@ function RaceCard({ entry, onViewRace }) {
             : entry.bibPhoto.original))
     : null;
 
-  // Medal with background removed (processed version for cutout effect)
-  const medalImageSrc = entry.medalPhoto
-    ? (entry.medalPhoto.processed
-        ? (entry.medalPhoto.useProcessed !== false ? entry.medalPhoto.processed : entry.medalPhoto.original)
-        : entry.medalPhoto.original)
-    : null;
+  // Medal photo (always background-removed, stored as string URL)
+  const medalImageSrc = typeof entry.medalPhoto === 'string' 
+    ? entry.medalPhoto 
+    : (entry.medalPhoto?.processed || entry.medalPhoto?.original || null);
 
   const finisherImageSrc = entry.finisherPhoto;
 

@@ -45,37 +45,6 @@ export function useRaceEntries() {
       const processedEntry = await processEntryImages(entryData, null, currentUser.uid);
       const id = await firestoreDb.addEntry(currentUser.uid, processedEntry);
       
-      // If medal photo background removal is in progress, update entry when it completes
-      if (entryData.medalPhoto && entryData.medalPhoto instanceof File) {
-        // The background removal was started in processEntryImages, but we need to update the entry when it completes
-        // We'll handle this by updating the entry after background removal finishes
-        const compressedOriginal = await compressImage(entryData.medalPhoto);
-        removeImageBackground(compressedOriginal)
-          .then((processedBlob) => {
-            return cropToContentBounds(processedBlob);
-          })
-          .then((croppedBlob) => {
-            return firestoreDb.uploadImage(currentUser.uid, croppedBlob, 'medal-photos');
-          })
-          .then((processedUrl) => {
-            // Update the entry with processed version
-            return firestoreDb.updateEntry(id, {
-              medalPhoto: {
-                original: processedEntry.medalPhoto.original,
-                processed: processedUrl,
-                useProcessed: true,
-              }
-            });
-          })
-          .then(() => {
-            // Refresh entries to show updated medal
-            loadEntries();
-          })
-          .catch((bgError) => {
-            console.warn('Background removal/cropping failed for medal, using original:', bgError);
-          });
-      }
-      
       // Wait for entries to refresh before returning
       await loadEntries();
       return id;
@@ -93,35 +62,6 @@ export function useRaceEntries() {
     try {
       const processedEntry = await processEntryImages(entryData, id, currentUser.uid);
       await firestoreDb.updateEntry(id, processedEntry);
-      
-      // If medal photo background removal is needed (new file uploaded)
-      if (entryData.medalPhoto && entryData.medalPhoto instanceof File) {
-        const compressedOriginal = await compressImage(entryData.medalPhoto);
-        removeImageBackground(compressedOriginal)
-          .then((processedBlob) => {
-            return cropToContentBounds(processedBlob);
-          })
-          .then((croppedBlob) => {
-            return firestoreDb.uploadImage(currentUser.uid, croppedBlob, 'medal-photos');
-          })
-          .then((processedUrl) => {
-            // Update the entry with processed version
-            return firestoreDb.updateEntry(id, {
-              medalPhoto: {
-                original: processedEntry.medalPhoto.original,
-                processed: processedUrl,
-                useProcessed: true,
-              }
-            });
-          })
-          .then(() => {
-            // Refresh entries to show updated medal
-            loadEntries();
-          })
-          .catch((bgError) => {
-            console.warn('Background removal/cropping failed for medal, using original:', bgError);
-          });
-      }
       
       await loadEntries();
     } catch (error) {
@@ -288,46 +228,39 @@ async function processEntryImages(entryData, existingId = null, userId = null) {
     }
   }
 
-  // Process medal photo (upload original immediately, background removal happens async)
+  // Process medal photo (remove background synchronously, store only processed version)
   if (entryData.medalPhoto && entryData.medalPhoto instanceof File) {
     try {
       // Compress original first
       const compressedOriginal = await compressImage(entryData.medalPhoto);
       
-      // Upload original to Storage immediately (this is fast)
-      const originalBlob = dataURLtoBlob(await blobToDataURL(compressedOriginal));
-      const originalUrl = await firestoreDb.uploadImage(userId, originalBlob, 'medal-photos');
+      // Remove background (this is the only version we'll save)
+      const processedBlob = await removeImageBackground(compressedOriginal);
       
-      // Set initial state with original - background removal will happen in background
-      processed.medalPhoto = {
-        original: originalUrl,
-        processed: originalUrl, // Start with original, will be updated later if processing succeeds
-        useProcessed: false, // Don't use processed version initially
-      };
+      // Crop to content bounds
+      const croppedBlob = await cropToContentBounds(processedBlob);
       
-      // Background removal will be handled in addEntry/updateEntry after entry ID is available
-      // We don't start it here to avoid duplicate processing
+      // Upload processed version to Storage
+      const processedUrl = await firestoreDb.uploadImage(userId, croppedBlob, 'medal-photos');
+      
+      // Store only the processed version (as a string, like finisherPhoto)
+      processed.medalPhoto = processedUrl;
     } catch (error) {
-      console.error('Failed to process medal photo:', error);
-      throw error;
+      console.error('Failed to process medal photo (background removal):', error);
+      // If background removal fails, we could either:
+      // 1. Throw error (user must retry)
+      // 2. Upload original (but user wants only processed)
+      // For now, we'll throw so user knows it failed
+      throw new Error('Failed to remove background from medal photo. Please try again.');
     }
   } else if (entryData.medalPhoto && (typeof entryData.medalPhoto === 'object' && !(entryData.medalPhoto instanceof File))) {
-    // Already processed, keep as is (for updates)
-    // Handle both cropped and processed formats for backward compatibility
+    // Legacy format - convert to string (use processed if available, otherwise original)
     if (entryData.medalPhoto.processed) {
-      // Has processed version (background removed)
-      processed.medalPhoto = {
-        original: entryData.medalPhoto.original,
-        processed: entryData.medalPhoto.processed,
-        useProcessed: entryData.medalPhoto.useProcessed !== false,
-      };
+      processed.medalPhoto = entryData.medalPhoto.processed;
     } else if (entryData.medalPhoto.cropped) {
-      // Has cropped version (convert to processed format)
-      processed.medalPhoto = {
-        original: entryData.medalPhoto.original,
-        processed: entryData.medalPhoto.cropped,
-        useProcessed: entryData.medalPhoto.useCropped !== false,
-      };
+      processed.medalPhoto = entryData.medalPhoto.cropped;
+    } else if (entryData.medalPhoto.original) {
+      processed.medalPhoto = entryData.medalPhoto.original;
     } else {
       processed.medalPhoto = entryData.medalPhoto;
     }
@@ -338,26 +271,14 @@ async function processEntryImages(entryData, existingId = null, userId = null) {
       try {
         const blob = dataURLtoBlob(entryData.medalPhoto);
         const url = await firestoreDb.uploadImage(userId, blob, 'medal-photos');
-        processed.medalPhoto = {
-          original: url,
-          processed: url,
-          useProcessed: false,
-        };
+        processed.medalPhoto = url;
       } catch (error) {
         console.error('Failed to upload legacy medal photo:', error);
-        processed.medalPhoto = {
-          original: entryData.medalPhoto,
-          processed: entryData.medalPhoto,
-          useProcessed: false,
-        };
+        processed.medalPhoto = entryData.medalPhoto; // Keep as is if upload fails
       }
     } else {
-      // Already a storage URL
-      processed.medalPhoto = {
-        original: entryData.medalPhoto,
-        processed: entryData.medalPhoto,
-        useProcessed: false,
-      };
+      // Already a storage URL - keep as is
+      processed.medalPhoto = entryData.medalPhoto;
     }
   }
 
