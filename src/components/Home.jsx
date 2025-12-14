@@ -31,6 +31,13 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showFABTooltip, setShowFABTooltip] = useState(false);
   const userMenuRef = useRef(null);
+  
+  // Refresh entries when component mounts (this ensures fresh data when key changes)
+  useEffect(() => {
+    if (refreshEntries) {
+      refreshEntries();
+    }
+  }, []); // Empty deps - only on mount
 
   // Close dropdown when clicking outside
   useEffect(() => {

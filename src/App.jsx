@@ -13,6 +13,7 @@ function App() {
   const [currentView, setCurrentView] = useState('home');
   const [selectedEntryId, setSelectedEntryId] = useState(null);
   const [showLogin, setShowLogin] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const homeRef = useRef(null);
 
   // Track page views
@@ -46,17 +47,15 @@ function App() {
   };
 
   const handleCloseForm = async () => {
-    // Entries are already refreshed by the hook after save
-    // Just close the form view
+    // Force refresh of entries in Home component by changing key
+    setRefreshKey(prev => prev + 1);
     setCurrentView('home');
     setSelectedEntryId(null);
   };
 
   const handleCloseDetail = async () => {
-    // Refresh entries when detail closes (in case entry was deleted)
-    if (refreshEntries) {
-      await refreshEntries();
-    }
+    // Force refresh of entries in Home component by changing key
+    setRefreshKey(prev => prev + 1);
     setCurrentView('home');
     setSelectedEntryId(null);
   };
@@ -67,8 +66,9 @@ function App() {
     } else {
       await addEntry(formData);
     }
-    // The hook already handles refreshEntries() after addEntry/updateEntry
-    // No additional delay needed - the form will wait for refresh in RaceForm component
+    // Force refresh after save by changing key
+    // This will cause Home to remount and reload entries
+    setRefreshKey(prev => prev + 1);
   };
 
   const handleLogout = async () => {
@@ -93,6 +93,7 @@ function App() {
     <div className="min-h-screen bg-gray-50">
       {/* Always show Home in the background */}
       <Home
+        key={refreshKey}
         onAddRace={handleAddRace}
         onViewRace={handleViewRace}
         currentUser={currentUser}

@@ -86,6 +86,9 @@ export function useRaceEntries() {
       await firestoreDb.deleteEntry(id);
       // Refresh to ensure consistency
       await loadEntries();
+      
+      // Small additional delay to ensure state has propagated
+      await new Promise(resolve => setTimeout(resolve, 200));
     } catch (error) {
       // Revert optimistic update on error
       await loadEntries();
