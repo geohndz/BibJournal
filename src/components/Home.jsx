@@ -761,15 +761,16 @@ function RaceCard({ entry, onViewRace }) {
                 ...getCornerStyle(corners.medal),
                 transform: `rotate(${medalRotation}deg)`,
                 transformOrigin: 'center',
-                width: '45%',
-                maxWidth: '240px',
+                height: '100%',
+                width: '30%',
+                maxWidth: '180px',
                 filter: 'drop-shadow(0 2px 6px rgba(0, 0, 0, 0.3)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2))',
               }}
             >
               <img
                 src={medalImageSrc}
                 alt={`Medal for ${entry.raceName}`}
-                className="w-full h-auto object-contain rounded-lg"
+                className="w-full h-full object-contain rounded-lg"
                 loading="lazy"
                 style={{
                   display: 'block',
