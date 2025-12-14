@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { firestoreDb } from '../lib/firestoreDb';
 import { useAuth } from '../contexts/AuthContext';
-import { removeImageBackground, cropToContentBounds, blobToDataURL, fileToDataURL, compressImage } from '../lib/imageProcessing';
+// Images are now processed in the form component, so we just upload them here
 import { parseGPX } from '../lib/gpxParser';
 
 /**
@@ -45,8 +45,12 @@ export function useRaceEntries() {
       const processedEntry = await processEntryImages(entryData, null, currentUser.uid);
       const id = await firestoreDb.addEntry(currentUser.uid, processedEntry);
       
-      // Wait for entries to refresh before returning
+      // Refresh entries and wait for it to complete
       await loadEntries();
+      
+      // Small additional delay to ensure state has propagated
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
       return id;
     } catch (error) {
       console.error('Failed to add entry:', error);
@@ -140,10 +144,9 @@ async function processEntryImages(entryData, existingId = null, userId = null) {
   const processBibPhoto = async () => {
     if (entryData.bibPhoto && entryData.bibPhoto instanceof File) {
       try {
-        // Compress the cropped image
-        const compressed = await compressImage(entryData.bibPhoto);
-        const originalBlob = dataURLtoBlob(await blobToDataURL(compressed));
-        const originalUrl = await firestoreDb.uploadImage(userId, originalBlob, 'bib-photos');
+        // Image is already processed (resized/compressed) in the form
+        // Just upload it directly
+        const originalUrl = await firestoreDb.uploadImage(userId, entryData.bibPhoto, 'bib-photos');
         
         return {
           original: originalUrl,
@@ -151,7 +154,7 @@ async function processEntryImages(entryData, existingId = null, userId = null) {
           useCropped: true,
         };
       } catch (error) {
-        console.error('Failed to process bib photo:', error);
+        console.error('Failed to upload bib photo:', error);
         throw error;
       }
     } else if (entryData.bibPhoto && (typeof entryData.bibPhoto === 'object' && !(entryData.bibPhoto instanceof File))) {
@@ -196,11 +199,11 @@ async function processEntryImages(entryData, existingId = null, userId = null) {
   const processFinisherPhoto = async () => {
     if (entryData.finisherPhoto && entryData.finisherPhoto instanceof File) {
       try {
-        const compressed = await compressImage(entryData.finisherPhoto);
-        const blob = dataURLtoBlob(await blobToDataURL(compressed));
-        return await firestoreDb.uploadImage(userId, blob, 'finisher-photos');
+        // Image is already processed (resized/compressed) in the form
+        // Just upload it directly
+        return await firestoreDb.uploadImage(userId, entryData.finisherPhoto, 'finisher-photos');
       } catch (error) {
-        console.error('Failed to process finisher photo:', error);
+        console.error('Failed to upload finisher photo:', error);
         throw error;
       }
     } else if (entryData.finisherPhoto) {
@@ -222,35 +225,18 @@ async function processEntryImages(entryData, existingId = null, userId = null) {
     return entryData.finisherPhoto;
   };
 
-  // Helper function to process medal photo (background removal is CPU-intensive, so keep sequential)
+  // Helper function to process medal photo
   const processMedalPhoto = async () => {
     if (entryData.medalPhoto && entryData.medalPhoto instanceof File) {
       try {
-        // Compress original first
-        const compressedOriginal = await compressImage(entryData.medalPhoto);
-        
-        // Remove background (this is CPU-intensive but necessary)
-        const processedBlob = await removeImageBackground(compressedOriginal);
-        
-        // Crop to content bounds
-        const croppedBlob = await cropToContentBounds(processedBlob);
-        
-        // Upload processed version to Storage
-        const processedUrl = await firestoreDb.uploadImage(userId, croppedBlob, 'medal-photos');
+        // Image is already processed (resized, background removed, cropped) in the form
+        // Just upload it directly
+        const processedUrl = await firestoreDb.uploadImage(userId, entryData.medalPhoto, 'medal-photos');
         
         return processedUrl;
       } catch (error) {
-        console.error('Failed to process medal photo (background removal):', error);
-        // If background removal fails, upload original as fallback instead of throwing
-        // This prevents the entire save from failing
-        try {
-          const compressed = await compressImage(entryData.medalPhoto);
-          const blob = dataURLtoBlob(await blobToDataURL(compressed));
-          return await firestoreDb.uploadImage(userId, blob, 'medal-photos');
-        } catch (uploadError) {
-          console.error('Failed to upload medal photo fallback:', uploadError);
-          throw new Error('Failed to process medal photo. Please try again.');
-        }
+        console.error('Failed to upload medal photo:', error);
+        throw error;
       }
     } else if (entryData.medalPhoto && (typeof entryData.medalPhoto === 'object' && !(entryData.medalPhoto instanceof File))) {
       if (entryData.medalPhoto.processed) {
@@ -276,8 +262,7 @@ async function processEntryImages(entryData, existingId = null, userId = null) {
     return entryData.medalPhoto;
   };
 
-  // Process images in parallel where possible
-  // Bib and finisher can be processed in parallel, but medal needs to be sequential due to CPU-intensive background removal
+  // Upload images in parallel (they're already processed)
   const [bibPhoto, finisherPhoto, medalPhoto] = await Promise.all([
     processBibPhoto(),
     processFinisherPhoto(),

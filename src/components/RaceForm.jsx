@@ -3,6 +3,7 @@ import { useRaceEntries } from '../hooks/useRaceEntries';
 import { ImageCropper } from './ImageCropper';
 import { trackFormStarted, trackFormAbandoned, trackRaceCreated, trackRaceUpdated, trackImageUploaded, trackGPXUploaded } from '../lib/analytics';
 import { getRandomRaceImage } from '../lib/imageUtils';
+import { resizeImage, compressImage, removeImageBackground, cropToContentBounds, blobToDataURL } from '../lib/imageProcessing';
 import confetti from 'canvas-confetti';
 import { Medal } from 'lucide-react';
 
@@ -24,8 +25,10 @@ export function RaceForm({ entryId, onClose, onSave }) {
   const { getEntry } = useRaceEntries();
   const [loading, setLoading] = useState(!!entryId);
   const [saving, setSaving] = useState(false);
+  const [savingStatus, setSavingStatus] = useState('');
   const [currentStep, setCurrentStep] = useState(1);
   const [showGPXInfo, setShowGPXInfo] = useState(false);
+  const [processingStatus, setProcessingStatus] = useState({});
   // Initialize with a default image immediately
   const [backgroundImage, setBackgroundImage] = useState(() => {
     const seed = entryId || Date.now();
@@ -276,12 +279,19 @@ export function RaceForm({ entryId, onClose, onSave }) {
     }
   };
 
-  const handleFileChange = (field, file) => {
-    setFormData((prev) => ({
-      ...prev,
-      [field]: file,
-    }));
-    
+  const handleFileChange = async (field, file) => {
+    if (!file) {
+      setFormData((prev) => ({
+        ...prev,
+        [field]: null,
+      }));
+      setProcessingStatus((prev) => ({
+        ...prev,
+        [field]: null,
+      }));
+      return;
+    }
+
     // Track image uploads
     if (file && field === 'bibPhoto') {
       trackImageUploaded('bib');
@@ -291,6 +301,97 @@ export function RaceForm({ entryId, onClose, onSave }) {
       trackImageUploaded('medal');
     } else if (file && field === 'gpxFile') {
       trackGPXUploaded();
+      // GPX files don't need processing
+      setFormData((prev) => ({
+        ...prev,
+        [field]: file,
+      }));
+      return;
+    }
+
+    // For images, process immediately
+    if (field === 'bibPhoto' || field === 'finisherPhoto' || field === 'medalPhoto') {
+      setProcessingStatus((prev) => ({
+        ...prev,
+        [field]: 'Resizing image...',
+      }));
+
+      try {
+        // Step 1: Resize first (reduces processing time significantly)
+        const resizedBlob = await resizeImage(file);
+        
+        if (field === 'bibPhoto') {
+          setProcessingStatus((prev) => ({
+            ...prev,
+            [field]: 'Compressing bib photo...',
+          }));
+          // For bib photo, just compress (cropping happens in ImageCropper)
+          const compressed = await compressImage(resizedBlob);
+          const processedFile = new File([compressed], file.name, { type: 'image/jpeg' });
+          setFormData((prev) => ({
+            ...prev,
+            [field]: processedFile,
+          }));
+          setProcessingStatus((prev) => ({
+            ...prev,
+            [field]: null,
+          }));
+        } else if (field === 'finisherPhoto') {
+          setProcessingStatus((prev) => ({
+            ...prev,
+            [field]: 'Compressing finisher photo...',
+          }));
+          // For finisher photo, just compress
+          const compressed = await compressImage(resizedBlob);
+          const processedFile = new File([compressed], file.name, { type: 'image/jpeg' });
+          setFormData((prev) => ({
+            ...prev,
+            [field]: processedFile,
+          }));
+          setProcessingStatus((prev) => ({
+            ...prev,
+            [field]: null,
+          }));
+        } else if (field === 'medalPhoto') {
+          setProcessingStatus((prev) => ({
+            ...prev,
+            [field]: 'Removing background...',
+          }));
+          // For medal photo, remove background then crop
+          const processedBlob = await removeImageBackground(resizedBlob);
+          setProcessingStatus((prev) => ({
+            ...prev,
+            [field]: 'Cropping medal photo...',
+          }));
+          const croppedBlob = await cropToContentBounds(processedBlob);
+          const processedFile = new File([croppedBlob], file.name, { type: 'image/png' });
+          setFormData((prev) => ({
+            ...prev,
+            [field]: processedFile,
+          }));
+          setProcessingStatus((prev) => ({
+            ...prev,
+            [field]: null,
+          }));
+        }
+      } catch (error) {
+        console.error(`Failed to process ${field}:`, error);
+        setProcessingStatus((prev) => ({
+          ...prev,
+          [field]: `Error: ${error.message}`,
+        }));
+        // Fallback: use original file if processing fails
+        setFormData((prev) => ({
+          ...prev,
+          [field]: file,
+        }));
+        setTimeout(() => {
+          setProcessingStatus((prev) => ({
+            ...prev,
+            [field]: null,
+          }));
+        }, 3000);
+      }
     }
   };
 
@@ -353,8 +454,34 @@ export function RaceForm({ entryId, onClose, onSave }) {
     }
 
     setSaving(true);
+    let statusInterval = null;
+
     try {
+      // Set up rotating status messages
+      let statusIndex = 0;
+      const updateStatus = () => {
+        // Show status based on what we're uploading
+        if (formData.bibPhoto && statusIndex === 0) {
+          setSavingStatus('Uploading bib photo...');
+          statusIndex = formData.finisherPhoto ? 1 : (formData.medalPhoto ? 2 : 3);
+        } else if (formData.finisherPhoto && statusIndex === 1) {
+          setSavingStatus('Uploading finisher photo...');
+          statusIndex = formData.medalPhoto ? 2 : 3;
+        } else if (formData.medalPhoto && statusIndex === 2) {
+          setSavingStatus('Uploading medal photo...');
+          statusIndex = 3;
+        } else {
+          setSavingStatus('Saving entry...');
+          statusIndex = 3;
+        }
+      };
+      
+      // Start with initial status
+      updateStatus();
+      statusInterval = setInterval(updateStatus, 800);
       await onSave(formData);
+      if (statusInterval) clearInterval(statusInterval);
+      setSavingStatus('');
       formSavedRef.current = true;
       
       // Track race created/updated
@@ -402,8 +529,8 @@ export function RaceForm({ entryId, onClose, onSave }) {
         }, 250);
         
         // Wait for confetti to start and entries to refresh before closing
-        // Increased wait time to ensure entries are fully loaded
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        // Increased wait time to ensure entries are fully loaded and state propagated
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
       
       onClose();
@@ -422,7 +549,9 @@ export function RaceForm({ entryId, onClose, onSave }) {
       }
       alert(errorMessage);
     } finally {
+      if (statusInterval) clearInterval(statusInterval);
       setSaving(false);
+      setSavingStatus('');
     }
   };
 
@@ -675,6 +804,7 @@ export function RaceForm({ entryId, onClose, onSave }) {
                     accept="image/*"
                     required={!entryId || !formData.bibPhoto}
                     enableCrop={true}
+                    processingStatus={processingStatus.bibPhoto}
                   />
                 </div>
 
@@ -687,6 +817,7 @@ export function RaceForm({ entryId, onClose, onSave }) {
                     value={formData.finisherPhoto}
                     onChange={(file) => handleFileChange('finisherPhoto', file)}
                     accept="image/*"
+                    processingStatus={processingStatus.finisherPhoto}
                   />
                 </div>
 
@@ -700,6 +831,7 @@ export function RaceForm({ entryId, onClose, onSave }) {
                     onChange={(file) => handleFileChange('medalPhoto', file)}
                     accept="image/*"
                     enableCrop={false}
+                    processingStatus={processingStatus.medalPhoto}
                   />
                 </div>
 
@@ -806,7 +938,7 @@ export function RaceForm({ entryId, onClose, onSave }) {
                     disabled={saving}
                     className="px-6 py-2 bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
-                    {saving ? 'Saving...' : entryId ? 'Update Entry' : 'Create Entry'}
+                    {saving ? (savingStatus || 'Saving...') : entryId ? 'Update Entry' : 'Create Entry'}
                   </button>
                 )}
               </div>
@@ -821,7 +953,7 @@ export function RaceForm({ entryId, onClose, onSave }) {
 /**
  * File input component with preview and optional cropping
  */
-function FileInput({ value, onChange, accept, required = false, enableCrop = false }) {
+function FileInput({ value, onChange, accept, required = false, enableCrop = false, processingStatus = null }) {
   const [showCropper, setShowCropper] = useState(false);
   const [tempFile, setTempFile] = useState(null);
   const isImage = accept?.includes('image');
@@ -840,16 +972,21 @@ function FileInput({ value, onChange, accept, required = false, enableCrop = fal
     }
   };
 
-  const handleCropComplete = (croppedDataURL) => {
+  const handleCropComplete = async (croppedDataURL) => {
     // Convert data URL to File
-    fetch(croppedDataURL)
-      .then(res => res.blob())
-      .then(blob => {
-        const file = new File([blob], tempFile.name, { type: blob.type });
-        onChange(file);
-        setShowCropper(false);
-        setTempFile(null);
-      });
+    try {
+      const res = await fetch(croppedDataURL);
+      const blob = await res.blob();
+      const file = new File([blob], tempFile.name, { type: blob.type });
+      // Process the cropped image (resize and compress)
+      onChange(file);
+      setShowCropper(false);
+      setTempFile(null);
+    } catch (error) {
+      console.error('Failed to process cropped image:', error);
+      setShowCropper(false);
+      setTempFile(null);
+    }
   };
 
   const handleCropCancel = () => {
@@ -895,20 +1032,34 @@ function FileInput({ value, onChange, accept, required = false, enableCrop = fal
       )}
       <div>
         <div className="flex items-center gap-4">
-          <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-            </svg>
-            Choose File
+          <label className={`cursor-pointer inline-flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+            processingStatus 
+              ? 'bg-blue-100 text-blue-700 cursor-wait' 
+              : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+          }`}>
+            {processingStatus ? (
+              <>
+                <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-blue-700"></div>
+                <span className="text-sm">{processingStatus}</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                Choose File
+              </>
+            )}
             <input
               type="file"
               onChange={handleFileChange}
               accept={accept}
               required={required && !value}
+              disabled={!!processingStatus}
               className="hidden"
             />
           </label>
-          {fileName && (
+          {fileName && !processingStatus && (
             <span className="text-sm text-gray-600">{fileName}</span>
           )}
         </div>

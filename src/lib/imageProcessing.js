@@ -158,14 +158,88 @@ export async function cropToContentBounds(imageSource) {
 }
 
 /**
- * Compress an image
+ * Resize an image to reduce dimensions (faster processing)
  * @param {File|Blob} file - The image file
- * @param {number} maxWidth - Maximum width
- * @param {number} maxHeight - Maximum height
- * @param {number} quality - Image quality (0-1)
+ * @param {number} maxWidth - Maximum width (default 1200 for faster processing)
+ * @param {number} maxHeight - Maximum height (default 1200 for faster processing)
+ * @returns {Promise<Blob>} - The resized image
+ */
+export function resizeImage(file, maxWidth = 1200, maxHeight = 1200) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target.result;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        // Calculate new dimensions
+        if (width > height) {
+          if (width > maxWidth) {
+            height *= maxWidth / width;
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width *= maxHeight / height;
+            height = maxHeight;
+          }
+        }
+
+        // If image is already smaller, return original
+        if (width >= img.width && height >= img.height) {
+          if (file instanceof Blob) {
+            resolve(file);
+          } else {
+            fileToDataURL(file).then(dataURL => {
+              const blob = dataURLtoBlob(dataURL);
+              resolve(blob);
+            }).catch(reject);
+          }
+          return;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob(resolve, 'image/jpeg', 0.95);
+      };
+      img.onerror = reject;
+    };
+    reader.onerror = reject;
+  });
+}
+
+/**
+ * Helper to convert data URL to blob
+ */
+function dataURLtoBlob(dataURL) {
+  const arr = dataURL.split(',');
+  const mime = arr[0].match(/:(.*?);/)[1];
+  const bstr = atob(arr[1]);
+  let n = bstr.length;
+  const u8arr = new Uint8Array(n);
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n);
+  }
+  return new Blob([u8arr], { type: mime });
+}
+
+/**
+ * Compress an image (now works on already-resized images)
+ * @param {File|Blob} file - The image file (should already be resized)
+ * @param {number} maxWidth - Maximum width (default 2000)
+ * @param {number} maxHeight - Maximum height (default 2000)
+ * @param {number} quality - Image quality (0-1, default 0.85)
  * @returns {Promise<Blob>} - The compressed image
  */
-export function compressImage(file, maxWidth = 2000, maxHeight = 2000, quality = 0.9) {
+export function compressImage(file, maxWidth = 2000, maxHeight = 2000, quality = 0.85) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
