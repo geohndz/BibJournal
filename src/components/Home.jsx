@@ -11,6 +11,7 @@ import { calculateStats } from '../lib/statsUtils';
 import { EmptyState } from './EmptyState';
 import { ViewToggle } from './ViewToggle';
 import { ProfileEditModal } from './ProfileEditModal';
+import { MapView } from './MapView';
 import { formatDate } from '../lib/dateUtils';
 import { trackViewModeChanged, trackFilterApplied, trackFilterCleared, trackRaceViewed, trackTotalEntries } from '../lib/analytics';
 import logoSvg from '../assets/Bib Journal.svg';
@@ -307,7 +308,7 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout, username })
                   onClick={() => setActiveTab('home')}
                   className="relative px-3 py-2 transition-colors"
                 >
-                  <span className={`text-sm ${activeTab === 'home' ? 'text-white' : 'text-gray-500'}`}>Home</span>
+                  <span className={`text-sm ${activeTab === 'home' ? 'text-white' : 'text-zinc-400'}`}>Home</span>
                   {activeTab === 'home' && (
                     <div className="absolute bottom-1.5 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-white rounded-full" />
                   )}
@@ -316,7 +317,7 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout, username })
                   onClick={() => setActiveTab('medals')}
                   className="relative px-3 py-2 transition-colors"
                 >
-                  <span className={`text-sm ${activeTab === 'medals' ? 'text-white' : 'text-gray-500'}`}>Medals</span>
+                  <span className={`text-sm ${activeTab === 'medals' ? 'text-white' : 'text-zinc-400'}`}>Medals</span>
                   {activeTab === 'medals' && (
                     <div className="absolute bottom-1.5 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-white rounded-full" />
                   )}
@@ -325,7 +326,7 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout, username })
                   onClick={() => setActiveTab('map')}
                   className="relative px-3 py-2 transition-colors"
                 >
-                  <span className={`text-sm ${activeTab === 'map' ? 'text-white' : 'text-gray-500'}`}>Map</span>
+                  <span className={`text-sm ${activeTab === 'map' ? 'text-white' : 'text-zinc-400'}`}>Map</span>
                   {activeTab === 'map' && (
                     <div className="absolute bottom-1.5 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-white rounded-full" />
                   )}
@@ -422,8 +423,13 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout, username })
       {/* Spacer for floating nav */}
       <div className="h-20"></div>
 
-      {/* Profile Section */}
-      {userProfile && (
+      {/* Map View - Full viewport when map tab is active */}
+      {activeTab === 'map' && (
+        <MapView entries={entries} onViewRace={handleViewRace} />
+      )}
+
+      {/* Profile Section - Hide when on map tab */}
+      {activeTab !== 'map' && userProfile && (
         <div className="py-8 mt-8">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col items-center">
@@ -551,7 +557,8 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout, username })
         </div>
       )}
 
-      {/* Content */}
+      {/* Content - Hide when on map tab */}
+      {activeTab !== 'map' && (
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24">
         {filteredEntries.length === 0 ? (
           <div className="text-center py-12">
@@ -610,10 +617,11 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout, username })
           </>
         )}
       </main>
+      )}
 
       {/* Floating Action Button - Only show for authenticated users viewing their own profile */}
-      {/* Floating Add Entry Button - Only show for authenticated users viewing their own profile */}
-      {!isPublicView && (
+      {/* Floating Add Entry Button - Only show for authenticated users viewing their own profile, and not on map tab */}
+      {!isPublicView && activeTab !== 'map' && (
         <button
           onClick={onAddRace}
           className="fixed bottom-6 right-6 z-20 bg-black/85 backdrop-blur-md hover:bg-black/90 text-white rounded-lg w-14 h-14 flex items-center justify-center shadow-lg border border-white/10 transition-colors"
