@@ -164,7 +164,7 @@ export function MapView({ entries, onViewRace }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-gray-50 z-40">
+    <div className="fixed inset-0 bg-gray-50 z-30">
       {/* Map Container - Full width */}
       <div className="w-full h-full relative">
         <MapContainer

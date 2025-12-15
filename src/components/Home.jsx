@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, LogOut, ChevronDown, Medal, Flag, Ruler, Gauge, Heart, Pencil, Home as HomeIcon, Map, Bug, LogIn } from 'lucide-react';
+import { Plus, LogOut, ChevronDown, Medal, Flag, Ruler, Gauge, Heart, Pencil, Home as HomeIcon, Map, Bug, LogIn, Share, Copy, Check } from 'lucide-react';
 import { useRaceEntries } from '../hooks/useRaceEntries';
 import { useViewMode } from '../hooks/useViewMode';
 import { useAuth } from '../contexts/AuthContext';
@@ -30,6 +30,8 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout, username })
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [userProfile, setUserProfile] = useState(null);
   const [showEditProfile, setShowEditProfile] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [publicEntries, setPublicEntries] = useState([]);
   const [publicLoading, setPublicLoading] = useState(true);
   const [isOwner, setIsOwner] = useState(false);
@@ -43,6 +45,18 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout, username })
   // Use appropriate entries and loading state
   const entries = isPublicView ? publicEntries : authEntries;
   const loading = isPublicView ? publicLoading : authLoading;
+
+  // Prevent body scroll when on map tab
+  useEffect(() => {
+    if (activeTab === 'map') {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [activeTab]);
   
   // Refresh entries when component mounts (this ensures fresh data when key changes)
   useEffect(() => {
@@ -289,21 +303,32 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout, username })
       }}
     >
       {/* Floating Navigation Bar */}
-      <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-2xl px-4">
-        <div className="flex items-center">
-          <nav className="bg-black/85 backdrop-blur-md rounded-lg px-4 py-2 flex items-center justify-between shadow-lg flex-1 border border-white/10">
+      <div className="fixed top-4 left-0 right-0 z-50 flex justify-center px-4">
+        <div className="w-full max-w-4xl">
+          <nav className="bg-black/85 backdrop-blur-md rounded-lg px-4 py-2 flex items-center shadow-lg flex-1 border border-white/10">
             {/* Left side - Logo */}
-            <div className="flex items-center">
-              <img 
-                src={logoLightSvg} 
-                alt="Bib Journal" 
-                className="h-6 w-auto"
-              />
+            <div className="flex items-center flex-shrink-0">
+              <button
+                onClick={() => {
+                  if (isPublicView && username) {
+                    navigate('/');
+                  } else {
+                    setActiveTab('home');
+                  }
+                }}
+                className="hover:opacity-80 transition-opacity"
+              >
+                <img 
+                  src={logoLightSvg} 
+                  alt="Bib Journal" 
+                  className="h-6 w-auto"
+                />
+              </button>
             </div>
 
             {/* Center - Navigation Tabs - Only show if not public view */}
             {!isPublicView && (
-              <div className="flex items-center gap-8">
+              <div className="flex items-center gap-8 flex-1 justify-center">
                 <button
                   onClick={() => setActiveTab('home')}
                   className="relative px-3 py-2 transition-colors"
@@ -335,7 +360,7 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout, username })
             )}
 
             {/* Right side - Profile or Login */}
-            <div className="flex items-center">
+            <div className="flex items-center flex-shrink-0">
               {/* Login Button - Only show if public view */}
               {isPublicView && (
                 <button
@@ -416,7 +441,6 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout, username })
               )}
             </div>
           </nav>
-
         </div>
       </div>
 
@@ -465,11 +489,20 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout, username })
                 </h1>
               )}
               
-              {/* Username */}
+              {/* Username with Share Icon */}
               {userProfile.username && (
-                <p className="text-gray-500 text-lg mb-4">
-                  @{userProfile.username}
-                </p>
+                <div className="flex items-center justify-center gap-2 mb-4">
+                  <p className="text-gray-500 text-lg">
+                    @{userProfile.username}
+                  </p>
+                  <button
+                    onClick={() => setShowShareModal(true)}
+                    className="text-gray-500 hover:text-gray-700 transition-colors"
+                    aria-label="Share profile"
+                  >
+                    <Share className="w-5 h-5" />
+                  </button>
+                </div>
               )}
 
               {/* Pills for Age, Location, and Experience Level */}
@@ -644,6 +677,74 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout, username })
             }
           }}
         />
+      )}
+
+      {/* Share Modal */}
+      {showShareModal && userProfile?.username && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+          onClick={() => {
+            setShowShareModal(false);
+            setCopied(false);
+          }}
+        >
+          <div 
+            className="bg-white rounded-lg shadow-xl max-w-md w-full p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-gray-900">Share Profile</h2>
+              <button
+                onClick={() => {
+                  setShowShareModal(false);
+                  setCopied(false);
+                }}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-2">Copy this link to share the profile:</p>
+              <div className="flex items-center gap-2 bg-zinc-50 rounded-lg p-3 border border-zinc-200">
+                <input
+                  type="text"
+                  readOnly
+                  value={`${window.location.origin}/${userProfile.username}`}
+                  className="flex-1 bg-transparent text-sm text-gray-900 outline-none"
+                />
+                <button
+                  onClick={async () => {
+                    const url = `${window.location.origin}/${userProfile.username}`;
+                    try {
+                      await navigator.clipboard.writeText(url);
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                    } catch (err) {
+                      console.error('Failed to copy:', err);
+                    }
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-black text-white rounded-lg hover:bg-zinc-900 transition-colors text-sm font-medium"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="w-4 h-4" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4" />
+                      Copy Link
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
