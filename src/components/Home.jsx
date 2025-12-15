@@ -288,7 +288,7 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout, username })
       {/* Floating Navigation Bar */}
       <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-2xl px-4">
         <div className="flex items-center">
-          <nav className="bg-black/85 backdrop-blur-md rounded-lg px-4 py-3 flex items-center justify-between shadow-lg flex-1 border border-white/10">
+          <nav className="bg-black/85 backdrop-blur-md rounded-lg px-4 py-2 flex items-center justify-between shadow-lg flex-1 border border-white/10">
             {/* Left side - Logo */}
             <div className="flex items-center">
               <img 
@@ -573,7 +573,7 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout, username })
                 {/* Use grid view for all types when sorting by type */}
                 <GridView entries={typeEntries} onViewRace={handleViewRace} onAddRace={onAddRace} showAddRace={false} />
                 {/* Add "Add Entry" card at the end of the first type only */}
-                {groupIndex === 0 && (
+                {groupIndex === 0 && !isPublicView && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-12 overflow-visible">
                     <AddRaceCard onAddRace={onAddRace} />
                   </div>
@@ -584,13 +584,13 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout, username })
         ) : (
           <>
             {viewMode === VIEW_MODES.GRID && (
-              <GridView entries={filteredEntries} onViewRace={handleViewRace} onAddRace={onAddRace} />
+              <GridView entries={filteredEntries} onViewRace={handleViewRace} onAddRace={onAddRace} showAddRace={!isPublicView} />
             )}
             {viewMode === VIEW_MODES.LIST && (
-              <ListView entries={filteredEntries} onViewRace={handleViewRace} onAddRace={onAddRace} />
+              <ListView entries={filteredEntries} onViewRace={handleViewRace} onAddRace={onAddRace} showAddRace={!isPublicView} />
             )}
             {viewMode === VIEW_MODES.COLUMN && (
-              <ColumnView entries={filteredEntries} onViewRace={handleViewRace} onAddRace={onAddRace} />
+              <ColumnView entries={filteredEntries} onViewRace={handleViewRace} onAddRace={onAddRace} showAddRace={!isPublicView} />
             )}
           </>
         )}
@@ -668,7 +668,7 @@ function AddRaceCard({ onAddRace }) {
         <Plus className="w-12 h-12 text-gray-400 group-hover:text-gray-600 transition-colors relative z-10" />
       </div>
       <div className="text-center">
-        <h3 className="font-semibold text-gray-900 mb-1">Add Race</h3>
+        <h3 className="font-semibold text-gray-900 mb-1">Add Entry</h3>
       </div>
     </div>
   );
@@ -743,13 +743,13 @@ function ListView({ entries, onViewRace, onAddRace, showAddRace = true }) {
 /**
  * Column view component - uses same RaceCard as grid view for consistency
  */
-function ColumnView({ entries, onViewRace, onAddRace }) {
+function ColumnView({ entries, onViewRace, onAddRace, showAddRace = true }) {
   return (
     <div className="max-w-2xl mx-auto space-y-20">
       {entries.map((entry) => (
         <RaceCard key={entry.id} entry={entry} onViewRace={onViewRace} />
       ))}
-      <AddRaceCard onAddRace={onAddRace} />
+      {showAddRace && <AddRaceCard onAddRace={onAddRace} />}
     </div>
   );
 }
