@@ -85,7 +85,9 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout, username })
       
       if (isPublicView && username) {
         // Load profile by username for public view
+        console.log('Loading public profile for username:', username);
         profile = await firestoreDb.getUserProfileByUsername(username);
+        console.log('Profile loaded:', profile);
         if (profile) {
           setUserProfile(profile);
           setProfileNotFound(false);
@@ -99,9 +101,11 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout, username })
           
           // Load entries for this user
           if (profile.id) {
+            console.log('Loading entries for user ID:', profile.id);
             setPublicLoading(true);
             try {
               const userEntries = await firestoreDb.getEntries(profile.id);
+              console.log('Entries loaded:', userEntries?.length || 0, userEntries);
               setPublicEntries(userEntries || []);
             } catch (error) {
               console.error('Failed to load public entries:', error);
@@ -109,8 +113,11 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout, username })
             } finally {
               setPublicLoading(false);
             }
+          } else {
+            console.error('Profile loaded but no ID found:', profile);
           }
         } else {
+          console.log('Profile not found for username:', username);
           setProfileNotFound(true);
           setUserProfile(null);
           setPublicEntries([]);
@@ -271,40 +278,10 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout, username })
     );
   }
 
-  if (entries.length === 0 && !loading) {
-    // Show empty state only for authenticated users viewing their own profile
-    if (!isPublicView) {
-      return <EmptyState onAddRace={onAddRace} currentUser={currentUser} onLogout={onLogout} />;
-    } else {
-      // Public view with no entries
-      return (
-        <div 
-          className="min-h-screen"
-          style={{
-            backgroundImage: 'radial-gradient(circle, #e5e7eb 1px, transparent 1px)',
-            backgroundSize: '20px 20px',
-            backgroundColor: '#f9fafb'
-          }}
-        >
-          <header className="bg-white border-b border-gray-200 sticky top-0 z-20">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-              <div className="flex items-center justify-between">
-                <img 
-                  src={logoSvg} 
-                  alt="Bib Journal" 
-                  className="h-8 w-auto"
-                />
-              </div>
-            </div>
-          </header>
-          <div className="flex items-center justify-center min-h-[60vh]">
-            <div className="text-center">
-              <p className="text-gray-500 text-lg">No race entries yet.</p>
-            </div>
-          </div>
-        </div>
-      );
-    }
+  // For public view, always show the profile section even if there are no entries
+  // For authenticated users, show empty state if no entries
+  if (entries.length === 0 && !loading && !isPublicView) {
+    return <EmptyState onAddRace={onAddRace} currentUser={currentUser} onLogout={onLogout} />;
   }
 
   return (
@@ -592,16 +569,22 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout, username })
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24">
         {filteredEntries.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-gray-500">No races match your filters.</p>
-            <button
-              onClick={() => {
-                setSelectedFilters([]);
-                trackFilterCleared();
-              }}
-              className="mt-4 text-black hover:underline"
-            >
-              Clear filters
-            </button>
+            {entries.length === 0 ? (
+              <p className="text-gray-500">No race entries yet.</p>
+            ) : (
+              <>
+                <p className="text-gray-500">No races match your filters.</p>
+                <button
+                  onClick={() => {
+                    setSelectedFilters([]);
+                    trackFilterCleared();
+                  }}
+                  className="mt-4 text-black hover:underline"
+                >
+                  Clear filters
+                </button>
+              </>
+            )}
           </div>
         ) : sortBy === 'type' && groupedByType ? (
           // Grouped by race type view
