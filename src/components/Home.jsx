@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Plus, LogOut, ChevronDown, Medal, Flag, Ruler, Gauge, Heart, Pencil } from 'lucide-react';
+import { Plus, LogOut, ChevronDown, Medal, Flag, Ruler, Gauge, Heart, Pencil, Home as HomeIcon, Map, Bug } from 'lucide-react';
 import { useRaceEntries } from '../hooks/useRaceEntries';
 import { useViewMode } from '../hooks/useViewMode';
 import { useAuth } from '../contexts/AuthContext';
@@ -9,11 +9,11 @@ import { calculateAge } from '../lib/ageUtils';
 import { calculateStats } from '../lib/statsUtils';
 import { EmptyState } from './EmptyState';
 import { ViewToggle } from './ViewToggle';
-import { FloatingActionButton } from './FloatingActionButton';
 import { ProfileEditModal } from './ProfileEditModal';
 import { formatDate } from '../lib/dateUtils';
 import { trackViewModeChanged, trackFilterApplied, trackFilterCleared, trackRaceViewed, trackTotalEntries } from '../lib/analytics';
 import logoSvg from '../assets/Bib Journal.svg';
+import logoLightSvg from '../assets/Bib Journal-light.svg';
 
 /**
  * Home screen component displaying all race entries
@@ -25,13 +25,13 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout, username })
   const [selectedFilters, setSelectedFilters] = useState([]);
   const [sortBy, setSortBy] = useState('date'); // 'date', 'type', 'name'
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [showFABTooltip, setShowFABTooltip] = useState(false);
   const [userProfile, setUserProfile] = useState(null);
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [publicEntries, setPublicEntries] = useState([]);
   const [publicLoading, setPublicLoading] = useState(true);
   const [isOwner, setIsOwner] = useState(false);
   const [profileNotFound, setProfileNotFound] = useState(false);
+  const [activeTab, setActiveTab] = useState('home');
   const userMenuRef = useRef(null);
   
   // Determine if we're viewing a public profile
@@ -62,14 +62,6 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout, username })
     };
   }, []);
 
-  // Show FAB tooltip on mount for 5 seconds
-  useEffect(() => {
-    setShowFABTooltip(true);
-    const timer = setTimeout(() => {
-      setShowFABTooltip(false);
-    }, 5000);
-    return () => clearTimeout(timer);
-  }, []);
 
   // Track total entries count
   useEffect(() => {
@@ -293,152 +285,131 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout, username })
         backgroundColor: '#f9fafb'
       }}
     >
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div>
+      {/* Floating Navigation Bar */}
+      <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-2xl px-4">
+        <div className="flex items-center">
+          <nav className="bg-black/85 backdrop-blur-md rounded-lg px-4 py-3 flex items-center justify-between shadow-lg flex-1 border border-white/10">
+            {/* Left side - Logo */}
+            <div className="flex items-center">
               <img 
-                src={logoSvg} 
+                src={logoLightSvg} 
                 alt="Bib Journal" 
-                className="h-8 w-auto"
+                className="h-6 w-auto"
               />
             </div>
-            <div className="flex items-center gap-4">
-              <ViewToggle
-                viewMode={viewMode}
-                onViewModeChange={handleViewModeChange}
-                VIEW_MODES={VIEW_MODES}
-              />
-              {/* Add Entry button - only show if authenticated and not public view */}
-              {!isPublicView && (
-                <button
-                  onClick={onAddRace}
-                  className="bg-primary-600 hover:bg-primary-700 text-white font-medium px-4 py-2 rounded-lg transition-colors inline-flex items-center gap-2"
-                >
-                  <Plus className="w-5 h-5" />
-                  Add Entry
-                </button>
-              )}
-              
-              {/* User Avatar Dropdown - Only show if authenticated and not public view */}
+
+            {/* Center - Navigation Tabs */}
+            <div className="flex items-center gap-8">
+              <button
+                onClick={() => setActiveTab('home')}
+                className="relative px-3 py-2 transition-colors"
+              >
+                <span className={`text-sm ${activeTab === 'home' ? 'text-white' : 'text-gray-500'}`}>Home</span>
+                {activeTab === 'home' && (
+                  <div className="absolute bottom-1.5 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-white rounded-full" />
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab('medals')}
+                className="relative px-3 py-2 transition-colors"
+              >
+                <span className={`text-sm ${activeTab === 'medals' ? 'text-white' : 'text-gray-500'}`}>Medals</span>
+                {activeTab === 'medals' && (
+                  <div className="absolute bottom-1.5 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-white rounded-full" />
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab('map')}
+                className="relative px-3 py-2 transition-colors"
+              >
+                <span className={`text-sm ${activeTab === 'map' ? 'text-white' : 'text-gray-500'}`}>Map</span>
+                {activeTab === 'map' && (
+                  <div className="absolute bottom-1.5 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-white rounded-full" />
+                )}
+              </button>
+            </div>
+
+            {/* Right side - Profile */}
+            <div className="flex items-center">
+              {/* Profile Picture Dropdown - Only show if authenticated and not public view */}
               {currentUser && !isPublicView && (
-                <div className="relative" ref={userMenuRef}>
+                <div className="relative flex items-center" ref={userMenuRef}>
                   <button
                     onClick={() => setShowUserMenu(!showUserMenu)}
-                    className="flex items-center justify-center w-10 h-10 rounded-full bg-primary-600 text-white font-medium hover:bg-primary-700 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+                    className="w-8 h-8 rounded-full overflow-hidden border-2 border-white focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-black"
                   >
-                    {currentUser?.displayName ? (
-                      currentUser.displayName.charAt(0).toUpperCase()
-                    ) : currentUser?.email ? (
-                      currentUser.email.charAt(0).toUpperCase()
+                    {userProfile?.profilePhoto ? (
+                      <img
+                        src={userProfile.profilePhoto}
+                        alt={userProfile.name || 'Profile'}
+                        className="w-full h-full object-cover"
+                      />
                     ) : (
-                      'U'
+                      <div className="w-full h-full bg-primary-600 text-white flex items-center justify-center text-sm font-medium">
+                        {currentUser?.displayName ? (
+                          currentUser.displayName.charAt(0).toUpperCase()
+                        ) : currentUser?.email ? (
+                          currentUser.email.charAt(0).toUpperCase()
+                        ) : (
+                          'U'
+                        )}
+                      </div>
                     )}
                   </button>
                   
                   {/* Dropdown Menu */}
                   {showUserMenu && (
-                    <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
-                      <div className="px-4 py-3 border-b border-gray-200">
+                    <div className="absolute right-0 top-full mt-6 w-64 bg-black/85 backdrop-blur-md rounded-lg shadow-lg border border-white/10 py-2 z-50">
+                      <div className="px-4 py-3 border-b border-zinc-700">
                         {currentUser?.displayName && (
-                          <p className="text-sm font-semibold text-gray-900">
+                          <p className="text-sm font-semibold text-white">
                             {currentUser.displayName}
                           </p>
                         )}
-                        <p className="text-sm text-gray-600 truncate">
+                        <p className="text-sm text-zinc-300 truncate">
                           {currentUser?.email || 'No email'}
                         </p>
                       </div>
-                      <button
-                        onClick={() => {
-                          onLogout();
-                          setShowUserMenu(false);
-                        }}
-                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors flex items-center gap-2"
-                      >
-                        <LogOut className="w-4 h-4" />
-                        Logout
-                      </button>
+                      <div className="px-2 py-2">
+                        {/* Report Bug Button - List item style, divider color background and white text on hover */}
+                        <a
+                          href="https://forms.gle/6Pvsi1BZCJDQfwQRA"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => setShowUserMenu(false)}
+                          className="w-full hover:bg-zinc-700 hover:text-white text-zinc-300 px-4 py-2 text-sm font-medium transition-colors flex items-center gap-2 rounded"
+                        >
+                          <Bug className="w-4 h-4" />
+                          Report Bug
+                        </a>
+                        {/* Sign Out Button - List item style, divider color background and red text on hover */}
+                        <button
+                          onClick={() => {
+                            onLogout();
+                            setShowUserMenu(false);
+                          }}
+                          className="w-full hover:bg-zinc-700 hover:text-red-500 text-zinc-300 px-4 py-2 text-sm transition-colors flex items-center gap-2 rounded"
+                        >
+                          <LogOut className="w-4 h-4" />
+                          Sign Out
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
               )}
             </div>
-          </div>
+          </nav>
+
         </div>
-      </header>
+      </div>
 
-      {/* Filter Bar */}
-      {entries.length > 0 && (
-        <div className="bg-white border-t border-b border-gray-200 sticky top-[73px] z-10">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-            <div className="flex items-center justify-between">
-              {/* Left side - Showing count */}
-              <div className="text-sm text-gray-600">
-                {selectedFilters.length > 0 
-                  ? `Showing: ${filteredEntries.length} ${filteredEntries.length === 1 ? 'race' : 'races'}`
-                  : `Showing: All (${entries.length} ${entries.length === 1 ? 'race' : 'races'})`
-                }
-              </div>
-              
-              {/* Right side - Sort and Filter dropdowns with labels */}
-              <div className="flex items-center gap-3">
-                {/* Sort Dropdown */}
-                <div className="flex items-center gap-2">
-                  <label className="text-sm text-gray-700 font-medium">Sort:</label>
-                  <div className="relative">
-                    <select
-                      value={sortBy}
-                      onChange={(e) => setSortBy(e.target.value)}
-                      className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent appearance-none pr-8 cursor-pointer"
-                    >
-                      <option value="date">Date</option>
-                      <option value="type">Race Type</option>
-                      <option value="name">Name (A-Z)</option>
-                    </select>
-                    {/* Custom dropdown arrow */}
-                    <div className="absolute right-2 top-1/2 transform -translate-y-1/2 pointer-events-none">
-                      <ChevronDown className="w-4 h-4 text-gray-500" />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Vertical Divider */}
-                <div className="h-6 w-px bg-gray-300"></div>
-
-                {/* Filter Dropdown */}
-                <div className="flex items-center gap-2">
-                  <label className="text-sm text-gray-700 font-medium">Filter:</label>
-                  <div className="relative">
-                    <select
-                      value={selectedFilters.length === 1 ? selectedFilters[0] : ''}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        handleFilterChange(value);
-                      }}
-                      className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent appearance-none pr-8 cursor-pointer"
-                    >
-                      <option value="">All Race Types</option>
-                      {availableRaceTypes.map(raceType => (
-                        <option key={raceType} value={raceType}>{raceType}</option>
-                      ))}
-                    </select>
-                    {/* Custom dropdown arrow */}
-                    <div className="absolute right-2 top-1/2 transform -translate-y-1/2 pointer-events-none">
-                      <ChevronDown className="w-4 h-4 text-gray-500" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Spacer for floating nav */}
+      <div className="h-20"></div>
 
       {/* Profile Section */}
       {userProfile && (
-        <div className="bg-white border-b border-gray-200 py-8">
+        <div className="py-8 mt-8">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col items-center">
               {/* Profile Picture with Edit Button */}
@@ -626,7 +597,16 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout, username })
       </main>
 
       {/* Floating Action Button - Only show for authenticated users viewing their own profile */}
-      {!isPublicView && <FloatingActionButton showTooltip={showFABTooltip} />}
+      {/* Floating Add Entry Button - Only show for authenticated users viewing their own profile */}
+      {!isPublicView && (
+        <button
+          onClick={onAddRace}
+          className="fixed bottom-6 right-6 z-20 bg-black/85 backdrop-blur-md hover:bg-black/90 text-white rounded-lg w-14 h-14 flex items-center justify-center shadow-lg border border-white/10 transition-colors"
+          aria-label="Add Entry"
+        >
+          <Plus className="w-6 h-6" />
+        </button>
+      )}
 
       {/* Profile Edit Modal - Only show if owner */}
       {showEditProfile && isOwner && userProfile && currentUser && (

@@ -38,19 +38,34 @@ After creating the database, go to the **Rules** tab and update with these rules
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Users can only read/write their own race entries
-    match /raceEntries/{entryId} {
-      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
-      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+    // User Profiles Collection
+    match /userProfiles/{userId} {
+      // Allow read access to all users (for public profiles)
+      allow read: if true;
+      
+      // Allow create/update only for the authenticated user's own profile
+      allow create, update: if request.auth != null && request.auth.uid == userId;
+      
+      // Allow delete only for the authenticated user's own profile
+      allow delete: if request.auth != null && request.auth.uid == userId;
     }
     
-    // User profiles collection
-    match /userProfiles/{userId} {
-      // Allow users to read any profile (for username checking and public profiles)
+    // Race Entries Collection
+    match /raceEntries/{entryId} {
+      // Allow read access to all users (for public profile viewing)
       allow read: if true;
-      // Allow users to create/update their own profile
-      allow create: if request.auth != null && request.auth.uid == userId;
-      allow update: if request.auth != null && request.auth.uid == userId;
+      
+      // Allow create only for authenticated users
+      allow create: if request.auth != null && 
+                     request.resource.data.userId == request.auth.uid;
+      
+      // Allow update only for the entry owner
+      allow update: if request.auth != null && 
+                     resource.data.userId == request.auth.uid;
+      
+      // Allow delete only for the entry owner
+      allow delete: if request.auth != null && 
+                     resource.data.userId == request.auth.uid;
     }
   }
 }
