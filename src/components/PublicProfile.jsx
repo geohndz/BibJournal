@@ -1,18 +1,22 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import { firestoreDb } from '../lib/firestoreDb';
 import { formatDate } from '../lib/dateUtils';
 import { getRaceTypeDisplay } from '../lib/raceUtils';
-import { Medal } from 'lucide-react';
+import { ProfileEditModal } from './ProfileEditModal';
+import { Medal, Pencil } from 'lucide-react';
 import logoSvg from '../assets/Bib Journal.svg';
 
 export function PublicProfile() {
   const { username } = useParams();
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
   const [profile, setProfile] = useState(null);
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { getEntries } = useRaceEntries();
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -33,8 +37,16 @@ export function PublicProfile() {
 
         setProfile(userProfile);
 
+        // Check if current user is the owner of this profile
+        // The profile.id is the document ID which is the userId
+        const userId = userProfile.id;
+        if (currentUser && userId === currentUser.uid) {
+          setIsOwner(true);
+        } else {
+          setIsOwner(false);
+        }
+
         // Load user's race entries
-        const userId = userProfile.userId || userProfile.id;
         if (userId) {
           const userEntries = await firestoreDb.getEntries(userId);
           setEntries(userEntries || []);
@@ -47,7 +59,7 @@ export function PublicProfile() {
     };
 
     loadProfile();
-  }, [username]);
+  }, [username, currentUser]);
 
   if (loading) {
     return (
@@ -105,18 +117,30 @@ export function PublicProfile() {
       <div className="bg-white border-b border-gray-200 py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col items-center">
-            {/* Profile Picture */}
-            {profile.profilePhoto ? (
-              <img
-                src={profile.profilePhoto}
-                alt={profile.name || 'Profile'}
-                className="w-32 h-32 rounded-full object-cover mb-4"
-              />
-            ) : (
-              <div className="w-32 h-32 rounded-full bg-primary-600 text-white flex items-center justify-center text-4xl font-medium mb-4">
-                {profile.name ? profile.name.charAt(0).toUpperCase() : 'U'}
-              </div>
-            )}
+            {/* Profile Picture with Edit Button */}
+            <div className="relative inline-block mb-4">
+              {profile.profilePhoto ? (
+                <img
+                  src={profile.profilePhoto}
+                  alt={profile.name || 'Profile'}
+                  className="w-32 h-32 rounded-full object-cover"
+                />
+              ) : (
+                <div className="w-32 h-32 rounded-full bg-primary-600 text-white flex items-center justify-center text-4xl font-medium">
+                  {profile.name ? profile.name.charAt(0).toUpperCase() : 'U'}
+                </div>
+              )}
+              {/* Edit Button - Only show if owner */}
+              {isOwner && currentUser && (
+                <button
+                  onClick={() => setShowEditProfile(true)}
+                  className="absolute -top-1 -right-1 bg-black text-white rounded-full p-2 hover:bg-gray-800 transition-colors shadow-lg"
+                  title="Edit Profile"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+              )}
+            </div>
             
             {/* Name */}
             {profile.name && (
@@ -212,6 +236,34 @@ export function PublicProfile() {
           </div>
         )}
       </main>
+
+      {/* Profile Edit Modal - Only show if owner */}
+      {showEditProfile && isOwner && profile && currentUser && (
+        <ProfileEditModal
+          profile={profile}
+          onClose={() => setShowEditProfile(false)}
+          onUpdate={async () => {
+            // Reload profile after update
+            try {
+              const userProfile = await firestoreDb.getUserProfileByUsername(username);
+              if (userProfile) {
+                setProfile(userProfile);
+                const userId = userProfile.id;
+                if (userId === currentUser.uid) {
+                  setIsOwner(true);
+                }
+                // Reload entries
+                if (userId) {
+                  const userEntries = await firestoreDb.getEntries(userId);
+                  setEntries(userEntries || []);
+                }
+              }
+            } catch (error) {
+              console.error('Failed to reload profile:', error);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

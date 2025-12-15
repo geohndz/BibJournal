@@ -17,9 +17,10 @@ import logoSvg from '../assets/Bib Journal.svg';
 
 /**
  * Home screen component displaying all race entries
+ * @param {string} username - Optional username for public profile view
  */
-export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
-  const { entries, loading, refreshEntries } = useRaceEntries();
+export function Home({ onAddRace, onViewRace, currentUser, onLogout, username }) {
+  const { entries: authEntries, loading: authLoading, refreshEntries } = useRaceEntries();
   const { viewMode, setViewMode, VIEW_MODES } = useViewMode();
   const [selectedFilters, setSelectedFilters] = useState([]);
   const [sortBy, setSortBy] = useState('date'); // 'date', 'type', 'name'
@@ -27,14 +28,25 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
   const [showFABTooltip, setShowFABTooltip] = useState(false);
   const [userProfile, setUserProfile] = useState(null);
   const [showEditProfile, setShowEditProfile] = useState(false);
+  const [publicEntries, setPublicEntries] = useState([]);
+  const [publicLoading, setPublicLoading] = useState(true);
+  const [isOwner, setIsOwner] = useState(false);
+  const [profileNotFound, setProfileNotFound] = useState(false);
   const userMenuRef = useRef(null);
+  
+  // Determine if we're viewing a public profile
+  const isPublicView = !!username;
+  
+  // Use appropriate entries and loading state
+  const entries = isPublicView ? publicEntries : authEntries;
+  const loading = isPublicView ? publicLoading : authLoading;
   
   // Refresh entries when component mounts (this ensures fresh data when key changes)
   useEffect(() => {
-    if (refreshEntries) {
+    if (!isPublicView && refreshEntries) {
       refreshEntries();
     }
-  }, []); // Empty deps - only on mount
+  }, [isPublicView]); // Empty deps - only on mount
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -66,13 +78,50 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
     }
   }, [entries.length, loading]);
 
-  // Load user profile
+  // Load user profile - either for current user or by username
   const loadUserProfile = async () => {
-    if (!currentUser) return;
-    
     try {
-      const profile = await firestoreDb.getUserProfile(currentUser.uid);
-      setUserProfile(profile);
+      let profile = null;
+      
+      if (isPublicView && username) {
+        // Load profile by username for public view
+        profile = await firestoreDb.getUserProfileByUsername(username);
+        if (profile) {
+          setUserProfile(profile);
+          setProfileNotFound(false);
+          
+          // Check if current user is the owner
+          if (currentUser && profile.id === currentUser.uid) {
+            setIsOwner(true);
+          } else {
+            setIsOwner(false);
+          }
+          
+          // Load entries for this user
+          if (profile.id) {
+            setPublicLoading(true);
+            try {
+              const userEntries = await firestoreDb.getEntries(profile.id);
+              setPublicEntries(userEntries || []);
+            } catch (error) {
+              console.error('Failed to load public entries:', error);
+              setPublicEntries([]);
+            } finally {
+              setPublicLoading(false);
+            }
+          }
+        } else {
+          setProfileNotFound(true);
+          setUserProfile(null);
+          setPublicEntries([]);
+          setPublicLoading(false);
+        }
+      } else if (currentUser) {
+        // Load current user's profile
+        profile = await firestoreDb.getUserProfile(currentUser.uid);
+        setUserProfile(profile);
+        setIsOwner(true);
+      }
     } catch (error) {
       console.error('Failed to load user profile:', error);
     }
@@ -80,7 +129,7 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
 
   useEffect(() => {
     loadUserProfile();
-  }, [currentUser]);
+  }, [currentUser, username, isPublicView]);
 
   const handleProfileUpdate = async () => {
     await loadUserProfile();
@@ -190,8 +239,72 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
       }, {})
     : null;
 
-  if (entries.length === 0) {
-    return <EmptyState onAddRace={onAddRace} currentUser={currentUser} onLogout={onLogout} />;
+  // Show profile not found message
+  if (isPublicView && profileNotFound && !loading) {
+    return (
+      <div 
+        className="min-h-screen"
+        style={{
+          backgroundImage: 'radial-gradient(circle, #e5e7eb 1px, transparent 1px)',
+          backgroundSize: '20px 20px',
+          backgroundColor: '#f9fafb'
+        }}
+      >
+        <header className="bg-white border-b border-gray-200 sticky top-0 z-20">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div className="flex items-center justify-between">
+              <img 
+                src={logoSvg} 
+                alt="Bib Journal" 
+                className="h-8 w-auto"
+              />
+            </div>
+          </div>
+        </header>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-gray-900 mb-4">Profile Not Found</h1>
+            <p className="text-gray-500 text-lg">The user profile you're looking for doesn't exist.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (entries.length === 0 && !loading) {
+    // Show empty state only for authenticated users viewing their own profile
+    if (!isPublicView) {
+      return <EmptyState onAddRace={onAddRace} currentUser={currentUser} onLogout={onLogout} />;
+    } else {
+      // Public view with no entries
+      return (
+        <div 
+          className="min-h-screen"
+          style={{
+            backgroundImage: 'radial-gradient(circle, #e5e7eb 1px, transparent 1px)',
+            backgroundSize: '20px 20px',
+            backgroundColor: '#f9fafb'
+          }}
+        >
+          <header className="bg-white border-b border-gray-200 sticky top-0 z-20">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+              <div className="flex items-center justify-between">
+                <img 
+                  src={logoSvg} 
+                  alt="Bib Journal" 
+                  className="h-8 w-auto"
+                />
+              </div>
+            </div>
+          </header>
+          <div className="flex items-center justify-center min-h-[60vh]">
+            <div className="text-center">
+              <p className="text-gray-500 text-lg">No race entries yet.</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
   }
 
   return (
@@ -220,55 +333,60 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
                 onViewModeChange={handleViewModeChange}
                 VIEW_MODES={VIEW_MODES}
               />
-              <button
-                onClick={onAddRace}
-                className="bg-primary-600 hover:bg-primary-700 text-white font-medium px-4 py-2 rounded-lg transition-colors inline-flex items-center gap-2"
-              >
-                <Plus className="w-5 h-5" />
-                Add Entry
-              </button>
-              
-              {/* User Avatar Dropdown */}
-              <div className="relative" ref={userMenuRef}>
+              {/* Add Entry button - only show if authenticated and not public view */}
+              {!isPublicView && (
                 <button
-                  onClick={() => setShowUserMenu(!showUserMenu)}
-                  className="flex items-center justify-center w-10 h-10 rounded-full bg-primary-600 text-white font-medium hover:bg-primary-700 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+                  onClick={onAddRace}
+                  className="bg-primary-600 hover:bg-primary-700 text-white font-medium px-4 py-2 rounded-lg transition-colors inline-flex items-center gap-2"
                 >
-                  {currentUser?.displayName ? (
-                    currentUser.displayName.charAt(0).toUpperCase()
-                  ) : currentUser?.email ? (
-                    currentUser.email.charAt(0).toUpperCase()
-                  ) : (
-                    'U'
-                  )}
+                  <Plus className="w-5 h-5" />
+                  Add Entry
                 </button>
-                
-                {/* Dropdown Menu */}
-                {showUserMenu && (
-                  <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
-                    <div className="px-4 py-3 border-b border-gray-200">
-                      {currentUser?.displayName && (
-                        <p className="text-sm font-semibold text-gray-900">
-                          {currentUser.displayName}
+              )}
+              
+              {/* User Avatar Dropdown - Only show if authenticated and not public view */}
+              {currentUser && !isPublicView && (
+                <div className="relative" ref={userMenuRef}>
+                  <button
+                    onClick={() => setShowUserMenu(!showUserMenu)}
+                    className="flex items-center justify-center w-10 h-10 rounded-full bg-primary-600 text-white font-medium hover:bg-primary-700 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+                  >
+                    {currentUser?.displayName ? (
+                      currentUser.displayName.charAt(0).toUpperCase()
+                    ) : currentUser?.email ? (
+                      currentUser.email.charAt(0).toUpperCase()
+                    ) : (
+                      'U'
+                    )}
+                  </button>
+                  
+                  {/* Dropdown Menu */}
+                  {showUserMenu && (
+                    <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
+                      <div className="px-4 py-3 border-b border-gray-200">
+                        {currentUser?.displayName && (
+                          <p className="text-sm font-semibold text-gray-900">
+                            {currentUser.displayName}
+                          </p>
+                        )}
+                        <p className="text-sm text-gray-600 truncate">
+                          {currentUser?.email || 'No email'}
                         </p>
-                      )}
-                      <p className="text-sm text-gray-600 truncate">
-                        {currentUser?.email || 'No email'}
-                      </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          onLogout();
+                          setShowUserMenu(false);
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors flex items-center gap-2"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        Logout
+                      </button>
                     </div>
-                    <button
-                      onClick={() => {
-                        onLogout();
-                        setShowUserMenu(false);
-                      }}
-                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors flex items-center gap-2"
-                    >
-                      <LogOut className="w-4 h-4" />
-                      Logout
-                    </button>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -359,14 +477,16 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
                     {userProfile.name ? userProfile.name.charAt(0).toUpperCase() : 'U'}
                   </div>
                 )}
-                {/* Edit Button */}
-                <button
-                  onClick={() => setShowEditProfile(true)}
-                  className="absolute -top-1 -right-1 bg-black text-white rounded-full p-2 hover:bg-gray-800 transition-colors shadow-lg"
-                  title="Edit Profile"
-                >
-                  <Pencil className="w-4 h-4" />
-                </button>
+                {/* Edit Button - Only show if viewing own profile */}
+                {isOwner && currentUser && userProfile && (
+                  <button
+                    onClick={() => setShowEditProfile(true)}
+                    className="absolute -top-1 -right-1 bg-black text-white rounded-full p-2 hover:bg-gray-800 transition-colors shadow-lg"
+                    title="Edit Profile"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                )}
               </div>
               
               {/* Name */}
@@ -522,15 +642,21 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
         )}
       </main>
 
-      {/* Floating Action Button */}
-      <FloatingActionButton showTooltip={showFABTooltip} />
+      {/* Floating Action Button - Only show for authenticated users viewing their own profile */}
+      {!isPublicView && <FloatingActionButton showTooltip={showFABTooltip} />}
 
-      {/* Profile Edit Modal */}
-      {showEditProfile && userProfile && (
+      {/* Profile Edit Modal - Only show if owner */}
+      {showEditProfile && isOwner && userProfile && currentUser && (
         <ProfileEditModal
           profile={userProfile}
           onClose={() => setShowEditProfile(false)}
-          onUpdate={handleProfileUpdate}
+          onUpdate={async () => {
+            await handleProfileUpdate();
+            // If in public view, reload the profile
+            if (isPublicView && username) {
+              await loadUserProfile();
+            }
+          }}
         />
       )}
     </div>

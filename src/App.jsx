@@ -1,11 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { Routes, Route, useLocation } from 'react-router-dom';
+import { Routes, Route, useLocation, useParams } from 'react-router-dom';
 import { Home } from './components/Home';
 import { RaceForm } from './components/RaceForm';
 import { RaceDetail } from './components/RaceDetail';
 import { Login } from './components/Login';
 import { Onboarding } from './components/Onboarding';
-import { PublicProfile } from './components/PublicProfile';
 import { useRaceEntries } from './hooks/useRaceEntries';
 import { useAuth } from './contexts/AuthContext';
 import { firestoreDb } from './lib/firestoreDb';
@@ -124,7 +123,7 @@ function App() {
   return (
     <Routes>
       {/* Public Profile Route - accessible without auth */}
-      <Route path="/:username" element={<PublicProfile />} />
+      <Route path="/:username" element={<PublicHomeWrapper />} />
       
       {/* Protected Routes */}
       <Route path="*" element={
@@ -182,6 +181,100 @@ function App() {
         </>
       } />
     </Routes>
+  );
+}
+
+// Wrapper component for public Home view
+function PublicHomeWrapper() {
+  const { username } = useParams();
+  const { currentUser, logout } = useAuth();
+  const [currentView, setCurrentView] = useState('home');
+  const [selectedEntryId, setSelectedEntryId] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const { addEntry, updateEntry } = useRaceEntries();
+
+  const handleAddRace = () => {
+    // Only allow if viewing own profile
+    if (currentUser) {
+      setSelectedEntryId(null);
+      setCurrentView('form');
+    }
+  };
+
+  const handleViewRace = (entryId) => {
+    setSelectedEntryId(entryId);
+    setCurrentView('detail');
+  };
+
+  const handleEditRace = (entryId) => {
+    setSelectedEntryId(entryId);
+    setCurrentView('form');
+  };
+
+  const handleCloseForm = async () => {
+    setRefreshKey(prev => prev + 1);
+    setCurrentView('home');
+    setSelectedEntryId(null);
+  };
+
+  const handleCloseDetail = async () => {
+    setRefreshKey(prev => prev + 1);
+    setCurrentView('home');
+    setSelectedEntryId(null);
+  };
+
+  const handleDeleteEntry = async () => {
+    setRefreshKey(prev => prev + 1);
+  };
+
+  const handleSaveRace = async (formData) => {
+    if (selectedEntryId) {
+      await updateEntry(selectedEntryId, formData);
+    } else {
+      await addEntry(formData);
+    }
+    setRefreshKey(prev => prev + 1);
+  };
+
+  const handleLogout = async () => {
+    try {
+      trackLogout();
+      await logout();
+    } catch (error) {
+      console.error('Failed to logout:', error);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Home
+        key={refreshKey}
+        username={username}
+        onAddRace={handleAddRace}
+        onViewRace={handleViewRace}
+        currentUser={currentUser}
+        onLogout={handleLogout}
+      />
+      
+      {/* Form overlay - only show if authenticated and viewing own profile */}
+      {currentUser && currentView === 'form' && (
+        <RaceForm
+          entryId={selectedEntryId}
+          onClose={handleCloseForm}
+          onSave={handleSaveRace}
+        />
+      )}
+      
+      {/* Detail overlay */}
+      {currentView === 'detail' && selectedEntryId && (
+        <RaceDetail
+          entryId={selectedEntryId}
+          onClose={handleCloseDetail}
+          onEdit={handleEditRace}
+          onDelete={handleDeleteEntry}
+        />
+      )}
+    </div>
   );
 }
 
