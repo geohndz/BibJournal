@@ -3,6 +3,7 @@ import { useRaceEntries } from '../hooks/useRaceEntries';
 import { ImageToggle } from './ImageToggle';
 import { RouteVisualization } from './RouteVisualization';
 import { formatDate } from '../lib/dateUtils';
+import { getRaceTypeDisplay, getRaceTypeForFilter } from '../lib/raceUtils';
 import { trackRaceViewed, trackRaceDeleted } from '../lib/analytics';
 import { Medal, Clock, Trophy, UserRound, Users, MoreVertical, Pencil, Trash2, Maximize2, X } from 'lucide-react';
 
@@ -60,8 +61,8 @@ export function RaceDetail({ entryId, onClose, onEdit, onDelete }) {
     setDeleting(true);
     try {
       // Track race deleted before deleting
-      if (entry && entry.raceType) {
-        trackRaceDeleted(entry.raceType);
+      if (entry) {
+        trackRaceDeleted(getRaceTypeForFilter(entry));
       }
       
       await deleteEntry(entryId);
@@ -174,7 +175,19 @@ export function RaceDetail({ entryId, onClose, onEdit, onDelete }) {
               )}
             </h1>
             <div className="flex flex-wrap items-center gap-2 mb-6 justify-center">
-              {entry.raceType && (
+              {/* Distance pill - show if we have raceDistance, or if old format with just raceType */}
+              {entry.raceDistance ? (
+                <span className="bg-gray-200 text-gray-700 px-3 py-1 rounded-full text-sm font-medium">
+                  {entry.raceDistance}
+                </span>
+              ) : entry.raceType && !entry.raceDistance ? (
+                // Old format: show the raceType as a single pill
+                <span className="bg-gray-200 text-gray-700 px-3 py-1 rounded-full text-sm font-medium">
+                  {entry.raceType}
+                </span>
+              ) : null}
+              {/* Type pill - only show if we have the new format with separate type */}
+              {entry.raceType && entry.raceDistance && (
                 <span className="bg-gray-200 text-gray-700 px-3 py-1 rounded-full text-sm font-medium">
                   {entry.raceType}
                 </span>

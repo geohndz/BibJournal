@@ -4,15 +4,19 @@ import 'react-image-crop/dist/ReactCrop.css';
 
 /**
  * Component for cropping images
+ * @param {string} imageSrc - Source image URL
+ * @param {function} onCropComplete - Callback when crop is complete
+ * @param {function} onCancel - Callback when crop is cancelled
+ * @param {number} aspectRatio - Optional aspect ratio (e.g., 1 for square, undefined for free)
  */
-export function ImageCropper({ imageSrc, onCropComplete, onCancel }) {
+export function ImageCropper({ imageSrc, onCropComplete, onCancel, aspectRatio }) {
   // Initialize with default crop to prevent undefined errors
   const [crop, setCrop] = useState({
     unit: '%',
     x: 5,
     y: 5,
     width: 90,
-    height: 90,
+    height: aspectRatio ? (90 / aspectRatio) : 90,
   });
   const [completedCrop, setCompletedCrop] = useState(null);
   const imgRef = useRef(null);
@@ -20,17 +24,18 @@ export function ImageCropper({ imageSrc, onCropComplete, onCancel }) {
 
   const onImageLoad = useCallback((e) => {
     // Set initial crop to be 90% of the image, centered
+    // If aspect ratio is set, maintain it
     const initialCrop = {
       unit: '%',
       x: 5, // Center the crop: (100 - 90) / 2 = 5
       y: 5,
       width: 90,
-      height: 90,
+      height: aspectRatio ? (90 / aspectRatio) : 90,
     };
     
     setCrop(initialCrop);
     setCompletedCrop(initialCrop);
-  }, []);
+  }, [aspectRatio]);
 
   const onCropChange = (newCrop) => {
     setCrop(newCrop);
@@ -149,7 +154,7 @@ export function ImageCropper({ imageSrc, onCropComplete, onCancel }) {
 
   return (
     <div 
-      className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-4"
       onClick={handleBackdropClick}
       onMouseDown={(e) => {
         e.preventDefault();
@@ -191,9 +196,9 @@ export function ImageCropper({ imageSrc, onCropComplete, onCancel }) {
                 crop={crop}
                 onChange={onCropChange}
                 onComplete={onCropCompleteInternal}
-                aspect={undefined}
+                aspect={aspectRatio}
                 minWidth={50}
-                minHeight={50}
+                minHeight={aspectRatio ? (50 / aspectRatio) : 50}
                 keepSelection
               >
                 <img

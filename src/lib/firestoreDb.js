@@ -4,6 +4,7 @@ import {
   getDoc,
   getDocs,
   addDoc,
+  setDoc,
   updateDoc,
   deleteDoc,
   query,
@@ -225,6 +226,120 @@ export const firestoreDb = {
       return downloadURL;
     } catch (error) {
       console.error('Failed to upload image:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * User Profile Operations
+   */
+
+  /**
+   * Check if a username is available
+   */
+  async checkUsernameAvailability(username) {
+    try {
+      if (!username || typeof username !== 'string') {
+        throw new Error('Invalid username provided');
+      }
+
+      const normalizedUsername = username.toLowerCase().trim();
+      if (!normalizedUsername) {
+        throw new Error('Username cannot be empty');
+      }
+
+      const usersRef = collection(db, 'userProfiles');
+      const q = query(usersRef, where('username', '==', normalizedUsername));
+      const querySnapshot = await getDocs(q);
+      
+      // Return true if no documents found (username is available)
+      return querySnapshot.empty;
+    } catch (error) {
+      console.error('Failed to check username availability:', error);
+      console.error('Error details:', {
+        code: error.code,
+        message: error.message,
+        stack: error.stack
+      });
+      throw error;
+    }
+  },
+
+  /**
+   * Get user profile by userId
+   */
+  async getUserProfile(userId) {
+    try {
+      const userRef = doc(db, 'userProfiles', userId);
+      const userSnap = await getDoc(userRef);
+      
+      if (userSnap.exists()) {
+        const data = userSnap.data();
+        return convertTimestamps({
+          id: userSnap.id,
+          ...data,
+        });
+      } else {
+        return null;
+      }
+    } catch (error) {
+      console.error('Failed to get user profile:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get user profile by username (for public profiles)
+   */
+  async getUserProfileByUsername(username) {
+    try {
+      const usersRef = collection(db, 'userProfiles');
+      const q = query(usersRef, where('username', '==', username.toLowerCase()));
+      const querySnapshot = await getDocs(q);
+      
+      if (!querySnapshot.empty) {
+        const doc = querySnapshot.docs[0];
+        const data = doc.data();
+        return convertTimestamps({
+          id: doc.id,
+          ...data,
+        });
+      } else {
+        return null;
+      }
+    } catch (error) {
+      console.error('Failed to get user profile by username:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Create or update user profile
+   */
+  async upsertUserProfile(userId, profileData) {
+    try {
+      const userRef = doc(db, 'userProfiles', userId);
+      const userSnap = await getDoc(userRef);
+      
+      const profileWithMetadata = {
+        ...profileData,
+        username: profileData.username?.toLowerCase(), // Store username in lowercase
+        updatedAt: serverTimestamp(),
+      };
+
+      if (userSnap.exists()) {
+        // Update existing profile
+        await updateDoc(userRef, profileWithMetadata);
+      } else {
+        // Create new profile
+        await setDoc(userRef, {
+          ...profileWithMetadata,
+          userId,
+          createdAt: serverTimestamp(),
+        });
+      }
+    } catch (error) {
+      console.error('Failed to upsert user profile:', error);
       throw error;
     }
   },

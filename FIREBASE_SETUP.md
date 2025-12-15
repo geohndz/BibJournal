@@ -43,6 +43,15 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
       allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
     }
+    
+    // User profiles collection
+    match /userProfiles/{userId} {
+      // Allow users to read any profile (for username checking and public profiles)
+      allow read: if true;
+      // Allow users to create/update their own profile
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && request.auth.uid == userId;
+    }
   }
 }
 ```

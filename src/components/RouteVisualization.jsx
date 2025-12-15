@@ -432,17 +432,17 @@ export function RouteVisualization({ routeData }) {
           
           {/* Pace */}
           {stats?.hasTimeData && 
-           stats?.averagePacePerMile !== null && 
-           stats?.averagePacePerMile !== undefined && 
-           !isNaN(stats.averagePacePerMile) && 
-           stats.averagePacePerMile > 0 && (
+           stats?.averagePace !== null && 
+           stats?.averagePace !== undefined && 
+           !isNaN(stats.averagePace) && 
+           stats.averagePace > 0 && (
             <div className="bg-gray-200 rounded-lg p-4 shadow-sm transform rotate-[-1.5deg] hover:rotate-0 transition-transform">
               <div className="flex items-center gap-2 text-gray-700 mb-2">
                 <Gauge className="w-4 h-4" />
                 <div className="text-xs font-medium uppercase tracking-wide">Pace</div>
               </div>
               <div className="font-bold text-lg text-gray-900">
-                {formatPace(stats.averagePacePerMile)} /mi
+                {formatPace(stats.averagePace)} /km
               </div>
             </div>
           )}

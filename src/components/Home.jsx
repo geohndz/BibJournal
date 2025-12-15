@@ -1,10 +1,16 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Plus, LogOut, ChevronDown, Medal } from 'lucide-react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { Plus, LogOut, ChevronDown, Medal, Flag, Ruler, Gauge, Heart, Pencil } from 'lucide-react';
 import { useRaceEntries } from '../hooks/useRaceEntries';
 import { useViewMode } from '../hooks/useViewMode';
+import { useAuth } from '../contexts/AuthContext';
+import { firestoreDb } from '../lib/firestoreDb';
+import { getRaceTypeDisplay, getRaceTypeForFilter } from '../lib/raceUtils';
+import { calculateAge } from '../lib/ageUtils';
+import { calculateStats } from '../lib/statsUtils';
 import { EmptyState } from './EmptyState';
 import { ViewToggle } from './ViewToggle';
 import { FloatingActionButton } from './FloatingActionButton';
+import { ProfileEditModal } from './ProfileEditModal';
 import { formatDate } from '../lib/dateUtils';
 import { trackViewModeChanged, trackFilterApplied, trackFilterCleared, trackRaceViewed, trackTotalEntries } from '../lib/analytics';
 import logoSvg from '../assets/Bib Journal.svg';
@@ -12,17 +18,6 @@ import logoSvg from '../assets/Bib Journal.svg';
 /**
  * Home screen component displaying all race entries
  */
-const RACE_TYPES = [
-  'Marathon',
-  'Half Marathon',
-  '10K',
-  '5K',
-  'Trail Race',
-  'Triathlon',
-  'Ultra',
-  'Other',
-];
-
 export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
   const { entries, loading, refreshEntries } = useRaceEntries();
   const { viewMode, setViewMode, VIEW_MODES } = useViewMode();
@@ -30,6 +25,8 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
   const [sortBy, setSortBy] = useState('date'); // 'date', 'type', 'name'
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showFABTooltip, setShowFABTooltip] = useState(false);
+  const [userProfile, setUserProfile] = useState(null);
+  const [showEditProfile, setShowEditProfile] = useState(false);
   const userMenuRef = useRef(null);
   
   // Refresh entries when component mounts (this ensures fresh data when key changes)
@@ -69,6 +66,41 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
     }
   }, [entries.length, loading]);
 
+  // Load user profile
+  const loadUserProfile = async () => {
+    if (!currentUser) return;
+    
+    try {
+      const profile = await firestoreDb.getUserProfile(currentUser.uid);
+      setUserProfile(profile);
+    } catch (error) {
+      console.error('Failed to load user profile:', error);
+    }
+  };
+
+  useEffect(() => {
+    loadUserProfile();
+  }, [currentUser]);
+
+  const handleProfileUpdate = async () => {
+    await loadUserProfile();
+  };
+
+  // Calculate stats from entries
+  const stats = useMemo(() => {
+    if (entries.length === 0) return null;
+    const calculatedStats = calculateStats(entries);
+    // Debug: log stats to see what we're getting
+    console.log('Calculated stats:', JSON.stringify(calculatedStats, null, 2));
+    console.log('Entries sample:', entries.slice(0, 2).map(e => ({
+      raceDistance: e.raceDistance,
+      raceType: e.raceType,
+      finishTime: e.results?.finishTime,
+      results: e.results
+    })));
+    return calculatedStats;
+  }, [entries]);
+
   // Track view mode changes
   const handleViewModeChange = (newMode) => {
     setViewMode(newMode);
@@ -90,7 +122,7 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
   const handleViewRace = (entryId) => {
     const entry = entries.find(e => e.id === entryId);
     if (entry) {
-      trackRaceViewed(entry.raceType);
+      trackRaceViewed(getRaceTypeForFilter(entry));
     }
     onViewRace(entryId);
   };
@@ -105,7 +137,7 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
 
   // Filter entries based on selected race types
   let filteredEntries = selectedFilters.length > 0
-    ? entries.filter(entry => selectedFilters.includes(entry.raceType))
+    ? entries.filter(entry => selectedFilters.includes(getRaceTypeForFilter(entry)))
     : entries;
 
   // Sort entries
@@ -113,8 +145,8 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
     switch (sortBy) {
       case 'type':
         // Sort by race type (A-Z)
-        const typeA = a.raceType || '';
-        const typeB = b.raceType || '';
+        const typeA = getRaceTypeForFilter(a) || '';
+        const typeB = getRaceTypeForFilter(b) || '';
         if (typeA !== typeB) {
           return typeA.localeCompare(typeB);
         }
@@ -145,12 +177,12 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
   });
 
   // Get unique race types from entries, sorted
-  const availableRaceTypes = [...new Set(entries.map(e => e.raceType).filter(Boolean))].sort();
+  const availableRaceTypes = [...new Set(entries.map(e => getRaceTypeForFilter(e)).filter(Boolean))].sort();
 
   // Group entries by race type when sorting by type
   const groupedByType = sortBy === 'type' 
     ? availableRaceTypes.reduce((acc, raceType) => {
-        const typeEntries = filteredEntries.filter(e => e.raceType === raceType);
+        const typeEntries = filteredEntries.filter(e => getRaceTypeForFilter(e) === raceType);
         if (typeEntries.length > 0) {
           acc[raceType] = typeEntries;
         }
@@ -309,6 +341,133 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
         </div>
       )}
 
+      {/* Profile Section */}
+      {userProfile && (
+        <div className="bg-white border-b border-gray-200 py-8">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex flex-col items-center">
+              {/* Profile Picture with Edit Button */}
+              <div className="relative inline-block mb-4">
+                {userProfile.profilePhoto ? (
+                  <img
+                    src={userProfile.profilePhoto}
+                    alt={userProfile.name || 'Profile'}
+                    className="w-32 h-32 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="w-32 h-32 rounded-full bg-primary-600 text-white flex items-center justify-center text-4xl font-medium">
+                    {userProfile.name ? userProfile.name.charAt(0).toUpperCase() : 'U'}
+                  </div>
+                )}
+                {/* Edit Button */}
+                <button
+                  onClick={() => setShowEditProfile(true)}
+                  className="absolute -top-1 -right-1 bg-black text-white rounded-full p-2 hover:bg-gray-800 transition-colors shadow-lg"
+                  title="Edit Profile"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+              </div>
+              
+              {/* Name */}
+              {userProfile.name && (
+                <h1 className="text-2xl font-bold text-gray-900 mb-1">
+                  {userProfile.name}
+                </h1>
+              )}
+              
+              {/* Username */}
+              {userProfile.username && (
+                <p className="text-gray-500 text-lg mb-4">
+                  @{userProfile.username}
+                </p>
+              )}
+
+              {/* Pills for Age, Location, and Experience Level */}
+              <div className="flex flex-wrap items-center gap-2 justify-center mb-6">
+                {/* Age pill */}
+                {(userProfile.birthday || userProfile.age) && (
+                  <span className="bg-gray-200 text-gray-700 px-3 py-1 rounded-full text-sm font-medium">
+                    {userProfile.birthday 
+                      ? `${calculateAge(userProfile.birthday)} years old`
+                      : userProfile.age 
+                      ? `${userProfile.age} years old`
+                      : null}
+                  </span>
+                )}
+                
+                {/* Location pill */}
+                {userProfile.location && (
+                  <span className="bg-gray-200 text-gray-700 px-3 py-1 rounded-full text-sm font-medium">
+                    {userProfile.location}
+                  </span>
+                )}
+                
+                {/* Experience Level pill */}
+                {userProfile.experienceLevel && (
+                  <span className="bg-gray-200 text-gray-700 px-3 py-1 rounded-full text-sm font-medium">
+                    {userProfile.experienceLevel.charAt(0).toUpperCase() + userProfile.experienceLevel.slice(1)}
+                  </span>
+                )}
+              </div>
+
+              {/* Stats Cards - Sticky note style */}
+              {stats && (
+                <div className="flex flex-wrap gap-4 justify-center mt-6">
+                  {/* Total Races - Blue */}
+                  <div className="bg-blue-200/70 rounded-lg p-4 shadow-sm transform rotate-[-2deg] hover:rotate-0 transition-transform">
+                    <div className="flex items-center gap-2 text-blue-700 mb-2">
+                      <Flag className="w-4 h-4" />
+                      <div className="text-xs font-medium uppercase tracking-wide">Total Races</div>
+                    </div>
+                    <div className="font-bold text-2xl text-gray-900">
+                      {stats.totalRaces}
+                    </div>
+                  </div>
+
+                  {/* Total Distance - Green */}
+                  {stats.totalDistance > 0 && (
+                    <div className="bg-green-200/70 rounded-lg p-4 shadow-sm transform rotate-[2deg] hover:rotate-0 transition-transform">
+                      <div className="flex items-center gap-2 text-green-700 mb-2">
+                        <Ruler className="w-4 h-4" />
+                        <div className="text-xs font-medium uppercase tracking-wide">Total Distance</div>
+                      </div>
+                      <div className="font-bold text-2xl text-gray-900">
+                        {stats.totalDistance.toFixed(1)} km
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Average Pace - Yellow */}
+                  <div className="bg-yellow-200/70 rounded-lg p-4 shadow-sm transform rotate-[-1.5deg] hover:rotate-0 transition-transform">
+                    <div className="flex items-center gap-2 text-yellow-700 mb-2">
+                      <Gauge className="w-4 h-4" />
+                      <div className="text-xs font-medium uppercase tracking-wide">Average Pace</div>
+                    </div>
+                    <div className="font-bold text-2xl text-gray-900">
+                      {stats.averagePace || 'N/A'}
+                    </div>
+                  </div>
+
+                  {/* Favorite Distance - Pink/Red */}
+                  {stats.favoriteDistance && (
+                    <div className="bg-pink-200/70 rounded-lg p-4 shadow-sm transform rotate-[1.5deg] hover:rotate-0 transition-transform">
+                      <div className="flex items-center gap-2 text-pink-700 mb-2">
+                        <Heart className="w-4 h-4" />
+                        <div className="text-xs font-medium uppercase tracking-wide">Favorite Distance</div>
+                      </div>
+                      <div className="font-bold text-2xl text-gray-900">
+                        {stats.favoriteDistance}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24">
         {filteredEntries.length === 0 ? (
@@ -365,6 +524,15 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout }) {
 
       {/* Floating Action Button */}
       <FloatingActionButton showTooltip={showFABTooltip} />
+
+      {/* Profile Edit Modal */}
+      {showEditProfile && userProfile && (
+        <ProfileEditModal
+          profile={userProfile}
+          onClose={() => setShowEditProfile(false)}
+          onUpdate={handleProfileUpdate}
+        />
+      )}
     </div>
   );
 }
@@ -633,7 +801,7 @@ function ListItemCard({ entry, onViewRace }) {
           )}
         </h3>
         <p className="text-sm text-gray-500 mb-1">
-          {entry.raceType} {entry.location && `• ${entry.location}`}
+          {getRaceTypeDisplay(entry)} {entry.location && `• ${entry.location}`}
         </p>
         <p className="text-xs text-gray-400">
           {entry.date && formatDate(entry.date, 'MMM d, yyyy')}
@@ -762,15 +930,15 @@ function RaceCard({ entry, onViewRace }) {
                 transform: `rotate(${medalRotation}deg)`,
                 transformOrigin: 'center',
                 height: '100%',
-                width: '30%',
-                maxWidth: '180px',
+                width: 'auto',
+                maxWidth: '160px',
                 filter: 'drop-shadow(0 2px 6px rgba(0, 0, 0, 0.3)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2))',
               }}
             >
               <img
                 src={medalImageSrc}
                 alt={`Medal for ${entry.raceName}`}
-                className="w-full h-full object-contain rounded-lg"
+                className="h-full w-auto object-contain rounded-lg"
                 loading="lazy"
                 style={{
                   display: 'block',
@@ -837,7 +1005,7 @@ function RaceCard({ entry, onViewRace }) {
           )}
         </h3>
         <p className="text-sm text-gray-500 mb-1">
-          {entry.raceType}
+          {getRaceTypeDisplay(entry)}
         </p>
         <p className="text-xs text-gray-400">
           {entry.date && formatDate(entry.date, 'MMM d, yyyy')}

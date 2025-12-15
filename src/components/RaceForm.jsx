@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRaceEntries } from '../hooks/useRaceEntries';
+import { useAuth } from '../contexts/AuthContext';
+import { firestoreDb } from '../lib/firestoreDb';
+import { getAgeDivision, getAgeDivisionFromBirthday, calculateAge } from '../lib/ageUtils';
 import { ImageCropper } from './ImageCropper';
 import { trackFormStarted, trackFormAbandoned, trackRaceCreated, trackRaceUpdated, trackImageUploaded, trackGPXUploaded } from '../lib/analytics';
 import { getRandomRaceImage } from '../lib/imageUtils';
@@ -7,15 +10,19 @@ import { resizeImage, compressImage, removeImageBackground, cropToContentBounds,
 import confetti from 'canvas-confetti';
 import { Medal } from 'lucide-react';
 
-const RACE_TYPES = [
-  'Marathon',
-  'Half Marathon',
-  '10K',
+const RACE_DISTANCES = [
   '5K',
-  'Trail Race',
-  'Triathlon',
+  '10K',
+  'Half Marathon',
+  'Marathon',
   'Ultra',
+  'Triathlon',
   'Other',
+];
+
+const RACE_TYPES = [
+  'Road',
+  'Trail',
 ];
 
 /**
@@ -23,6 +30,7 @@ const RACE_TYPES = [
  */
 export function RaceForm({ entryId, onClose, onSave }) {
   const { getEntry } = useRaceEntries();
+  const { currentUser } = useAuth();
   const [loading, setLoading] = useState(!!entryId);
   const [saving, setSaving] = useState(false);
   const [savingStatus, setSavingStatus] = useState('');
@@ -37,8 +45,10 @@ export function RaceForm({ entryId, onClose, onSave }) {
   const locationInputRef = useRef(null);
   const autocompleteRef = useRef(null);
   const gpxInfoRef = useRef(null);
+  const userProfileLoadedRef = useRef(false);
   const [formData, setFormData] = useState({
     raceName: '',
+    raceDistance: '',
     raceType: '',
     location: '',
     date: '',
@@ -66,6 +76,47 @@ export function RaceForm({ entryId, onClose, onSave }) {
     const image = getRandomRaceImage(seed);
     setBackgroundImage(image);
   }, [entryId]);
+
+  // Load user profile and auto-populate age division for new entries
+  useEffect(() => {
+    const loadUserProfile = async () => {
+      // Only load profile for new entries (not when editing)
+      if (entryId || !currentUser || userProfileLoadedRef.current) {
+        return;
+      }
+
+      try {
+        const profile = await firestoreDb.getUserProfile(currentUser.uid);
+        if (profile) {
+          let ageDivision = '';
+          
+          // Prefer birthday to calculate age division (more accurate)
+          if (profile.birthday) {
+            ageDivision = getAgeDivisionFromBirthday(profile.birthday);
+          } else if (profile.age) {
+            // Fall back to stored age if birthday not available
+            ageDivision = getAgeDivision(profile.age);
+          }
+          
+          if (ageDivision && !formData.results.division) {
+            setFormData(prev => ({
+              ...prev,
+              results: {
+                ...prev.results,
+                division: ageDivision,
+              },
+            }));
+          }
+        }
+        userProfileLoadedRef.current = true;
+      } catch (error) {
+        console.error('Failed to load user profile:', error);
+        // Don't show error to user, just silently fail
+      }
+    };
+
+    loadUserProfile();
+  }, [entryId, currentUser]);
 
   // Initialize Google Places Autocomplete
   useEffect(() => {
@@ -208,9 +259,38 @@ export function RaceForm({ entryId, onClose, onSave }) {
       console.log('Entry loaded:', entry);
       
       if (entry) {
+        // Handle backward compatibility: if entry has old raceType format, try to parse it
+        let raceDistance = entry.raceDistance || '';
+        let raceType = entry.raceType || '';
+        
+        // If we have old raceType but no raceDistance, try to extract from old format
+        if (entry.raceType && !entry.raceDistance) {
+          const oldType = entry.raceType;
+          // Check if it contains "Trail" or "Road"
+          if (oldType.toLowerCase().includes('trail')) {
+            raceType = 'Trail';
+            // Extract distance (remove "Trail" and "Race" from string)
+            const distancePart = oldType.replace(/trail/gi, '').replace(/race/gi, '').trim();
+            if (distancePart && RACE_DISTANCES.includes(distancePart)) {
+              raceDistance = distancePart;
+            } else if (oldType === 'Trail Race') {
+              raceDistance = 'Other';
+            }
+          } else {
+            raceType = 'Road';
+            // Check if it matches a distance
+            if (RACE_DISTANCES.includes(oldType)) {
+              raceDistance = oldType;
+            } else {
+              raceDistance = oldType; // Keep as is for "Triathlon", "Other", etc.
+            }
+          }
+        }
+        
         setFormData({
           raceName: entry.raceName || '',
-          raceType: entry.raceType || '',
+          raceDistance: raceDistance,
+          raceType: raceType,
           location: typeof entry.location === 'string' 
             ? entry.location 
             : (typeof entry.location === 'object' && entry.location !== null && entry.location.name
@@ -408,8 +488,12 @@ export function RaceForm({ entryId, onClose, onSave }) {
         alert('Race name is required');
         return;
       }
+      if (!formData.raceDistance) {
+        alert('Race distance is required');
+        return;
+      }
       if (!formData.raceType) {
-        alert('Race type is required');
+        alert('Race type (Road/Trail) is required');
         return;
       }
       if (!formData.location.trim()) {
@@ -491,11 +575,19 @@ export function RaceForm({ entryId, onClose, onSave }) {
       const hasGPX = !!formData.gpxFile;
       
       if (entryId) {
-        trackRaceUpdated(formData.raceType);
+        // Combine distance and type for analytics
+        const raceTypeForAnalytics = formData.raceDistance && formData.raceType 
+          ? `${formData.raceDistance} ${formData.raceType}` 
+          : formData.raceDistance || formData.raceType || 'Unknown';
+        trackRaceUpdated(raceTypeForAnalytics);
         // Wait for entries to refresh before closing
         await new Promise(resolve => setTimeout(resolve, 500));
       } else {
-        trackRaceCreated(formData.raceType, hasBibPhoto, hasFinisherPhoto, hasMedalPhoto, hasGPX);
+        // Combine distance and type for analytics
+        const raceTypeForAnalytics = formData.raceDistance && formData.raceType 
+          ? `${formData.raceDistance} ${formData.raceType}` 
+          : formData.raceDistance || formData.raceType || 'Unknown';
+        trackRaceCreated(raceTypeForAnalytics, hasBibPhoto, hasFinisherPhoto, hasMedalPhoto, hasGPX);
         
         // Confetti animation for new race!
         const duration = 3000;
@@ -641,28 +733,59 @@ export function RaceForm({ entryId, onClose, onSave }) {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Race Type <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <select
-                        value={formData.raceType}
-                        onChange={(e) => handleChange('raceType', e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent appearance-none pr-10 cursor-pointer"
-                        required
-                      >
-                        <option value="">Select race type</option>
-                        {RACE_TYPES.map((type) => (
-                          <option key={type} value={type}>
-                            {type}
-                          </option>
-                        ))}
-                      </select>
-                      {/* Custom dropdown arrow */}
-                      <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
-                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
+                    {/* Race Distance and Type - Side by Side */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Distance <span className="text-red-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <select
+                            value={formData.raceDistance}
+                            onChange={(e) => handleChange('raceDistance', e.target.value)}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent appearance-none pr-10 cursor-pointer"
+                            required
+                          >
+                            <option value="">Select distance</option>
+                            {RACE_DISTANCES.map((distance) => (
+                              <option key={distance} value={distance}>
+                                {distance}
+                              </option>
+                            ))}
+                          </select>
+                          {/* Custom dropdown arrow */}
+                          <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
+                            <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Type <span className="text-red-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <select
+                            value={formData.raceType}
+                            onChange={(e) => handleChange('raceType', e.target.value)}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent appearance-none pr-10 cursor-pointer"
+                            required
+                          >
+                            <option value="">Select type</option>
+                            {RACE_TYPES.map((type) => (
+                              <option key={type} value={type}>
+                                {type}
+                              </option>
+                            ))}
+                          </select>
+                          {/* Custom dropdown arrow */}
+                          <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
+                            <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
