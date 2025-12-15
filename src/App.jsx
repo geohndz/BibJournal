@@ -172,6 +172,7 @@ function App() {
                       onClose={handleCloseDetail}
                       onEdit={handleEditRace}
                       onDelete={handleDeleteEntry}
+                      isPublicView={false}
                     />
                   )}
                 </div>
@@ -272,6 +273,7 @@ function PublicHomeWrapper() {
           onClose={handleCloseDetail}
           onEdit={handleEditRace}
           onDelete={handleDeleteEntry}
+          isPublicView={!!username}
         />
       )}
     </div>

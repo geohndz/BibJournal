@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Plus, LogOut, ChevronDown, Medal, Flag, Ruler, Gauge, Heart, Pencil, Home as HomeIcon, Map, Bug } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Plus, LogOut, ChevronDown, Medal, Flag, Ruler, Gauge, Heart, Pencil, Home as HomeIcon, Map, Bug, LogIn } from 'lucide-react';
 import { useRaceEntries } from '../hooks/useRaceEntries';
 import { useViewMode } from '../hooks/useViewMode';
 import { useAuth } from '../contexts/AuthContext';
@@ -20,6 +21,7 @@ import logoLightSvg from '../assets/Bib Journal-light.svg';
  * @param {string} username - Optional username for public profile view
  */
 export function Home({ onAddRace, onViewRace, currentUser, onLogout, username }) {
+  const navigate = useNavigate();
   const { entries: authEntries, loading: authLoading, refreshEntries } = useRaceEntries();
   const { viewMode, setViewMode, VIEW_MODES } = useViewMode();
   const [selectedFilters, setSelectedFilters] = useState([]);
@@ -298,39 +300,52 @@ export function Home({ onAddRace, onViewRace, currentUser, onLogout, username })
               />
             </div>
 
-            {/* Center - Navigation Tabs */}
-            <div className="flex items-center gap-8">
-              <button
-                onClick={() => setActiveTab('home')}
-                className="relative px-3 py-2 transition-colors"
-              >
-                <span className={`text-sm ${activeTab === 'home' ? 'text-white' : 'text-gray-500'}`}>Home</span>
-                {activeTab === 'home' && (
-                  <div className="absolute bottom-1.5 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-white rounded-full" />
-                )}
-              </button>
-              <button
-                onClick={() => setActiveTab('medals')}
-                className="relative px-3 py-2 transition-colors"
-              >
-                <span className={`text-sm ${activeTab === 'medals' ? 'text-white' : 'text-gray-500'}`}>Medals</span>
-                {activeTab === 'medals' && (
-                  <div className="absolute bottom-1.5 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-white rounded-full" />
-                )}
-              </button>
-              <button
-                onClick={() => setActiveTab('map')}
-                className="relative px-3 py-2 transition-colors"
-              >
-                <span className={`text-sm ${activeTab === 'map' ? 'text-white' : 'text-gray-500'}`}>Map</span>
-                {activeTab === 'map' && (
-                  <div className="absolute bottom-1.5 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-white rounded-full" />
-                )}
-              </button>
-            </div>
+            {/* Center - Navigation Tabs - Only show if not public view */}
+            {!isPublicView && (
+              <div className="flex items-center gap-8">
+                <button
+                  onClick={() => setActiveTab('home')}
+                  className="relative px-3 py-2 transition-colors"
+                >
+                  <span className={`text-sm ${activeTab === 'home' ? 'text-white' : 'text-gray-500'}`}>Home</span>
+                  {activeTab === 'home' && (
+                    <div className="absolute bottom-1.5 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-white rounded-full" />
+                  )}
+                </button>
+                <button
+                  onClick={() => setActiveTab('medals')}
+                  className="relative px-3 py-2 transition-colors"
+                >
+                  <span className={`text-sm ${activeTab === 'medals' ? 'text-white' : 'text-gray-500'}`}>Medals</span>
+                  {activeTab === 'medals' && (
+                    <div className="absolute bottom-1.5 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-white rounded-full" />
+                  )}
+                </button>
+                <button
+                  onClick={() => setActiveTab('map')}
+                  className="relative px-3 py-2 transition-colors"
+                >
+                  <span className={`text-sm ${activeTab === 'map' ? 'text-white' : 'text-gray-500'}`}>Map</span>
+                  {activeTab === 'map' && (
+                    <div className="absolute bottom-1.5 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-white rounded-full" />
+                  )}
+                </button>
+              </div>
+            )}
 
-            {/* Right side - Profile */}
+            {/* Right side - Profile or Login */}
             <div className="flex items-center">
+              {/* Login Button - Only show if public view */}
+              {isPublicView && (
+                <button
+                  onClick={() => navigate('/')}
+                  className="px-4 py-1.5 text-sm text-white hover:bg-white/10 rounded-lg transition-colors flex items-center gap-2"
+                >
+                  <LogIn className="w-4 h-4" />
+                  Login
+                </button>
+              )}
+              
               {/* Profile Picture Dropdown - Only show if authenticated and not public view */}
               {currentUser && !isPublicView && (
                 <div className="relative flex items-center" ref={userMenuRef}>

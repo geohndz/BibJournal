@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRaceEntries } from '../hooks/useRaceEntries';
+import { firestoreDb } from '../lib/firestoreDb';
 import { ImageToggle } from './ImageToggle';
 import { RouteVisualization } from './RouteVisualization';
 import { formatDate } from '../lib/dateUtils';
@@ -10,8 +11,8 @@ import { Medal, Clock, Trophy, UserRound, Users, MoreVertical, Pencil, Trash2, M
 /**
  * Race detail view component
  */
-export function RaceDetail({ entryId, onClose, onEdit, onDelete }) {
-  const { getEntry, deleteEntry } = useRaceEntries();
+export function RaceDetail({ entryId, onClose, onEdit, onDelete, isPublicView = false }) {
+  const { getEntry: getAuthEntry, deleteEntry } = useRaceEntries();
   const [entry, setEntry] = useState(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
@@ -21,7 +22,7 @@ export function RaceDetail({ entryId, onClose, onEdit, onDelete }) {
 
   useEffect(() => {
     loadEntry();
-  }, [entryId]);
+  }, [entryId, isPublicView]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -39,7 +40,10 @@ export function RaceDetail({ entryId, onClose, onEdit, onDelete }) {
 
   const loadEntry = async () => {
     try {
-      const data = await getEntry(entryId);
+      // Use firestoreDb directly for public views, or use hook for authenticated views
+      const data = isPublicView 
+        ? await firestoreDb.getEntry(entryId)
+        : await getAuthEntry(entryId);
       setEntry(data);
       setLoading(false);
       
@@ -121,44 +125,46 @@ export function RaceDetail({ entryId, onClose, onEdit, onDelete }) {
               </svg>
               Back
             </button>
-            <div className="flex items-center gap-3">
-              {/* Dropdown Menu */}
-              <div className="relative" ref={menuRef}>
-                <button
-                  onClick={() => setShowMenu(!showMenu)}
-                  className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                  aria-label="More options"
-                >
-                  <MoreVertical className="w-5 h-5" />
-                </button>
-                
-                {showMenu && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
-                    <button
-                      onClick={() => {
-                        setShowMenu(false);
-                        onEdit(entry.id);
-                      }}
-                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors flex items-center gap-2"
-                    >
-                      <Pencil className="w-4 h-4" />
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowMenu(false);
-                        handleDelete();
-                      }}
-                      disabled={deleting}
-                      className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 flex items-center gap-2"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      {deleting ? 'Deleting...' : 'Delete'}
-                    </button>
-                  </div>
-                )}
+            {/* Dropdown Menu - Only show if not public view */}
+            {!isPublicView && (
+              <div className="flex items-center gap-3">
+                <div className="relative" ref={menuRef}>
+                  <button
+                    onClick={() => setShowMenu(!showMenu)}
+                    className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                    aria-label="More options"
+                  >
+                    <MoreVertical className="w-5 h-5" />
+                  </button>
+                  
+                  {showMenu && (
+                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
+                      <button
+                        onClick={() => {
+                          setShowMenu(false);
+                          onEdit(entry.id);
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors flex items-center gap-2"
+                      >
+                        <Pencil className="w-4 h-4" />
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowMenu(false);
+                          handleDelete();
+                        }}
+                        disabled={deleting}
+                        className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 flex items-center gap-2"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        {deleting ? 'Deleting...' : 'Delete'}
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </header>
